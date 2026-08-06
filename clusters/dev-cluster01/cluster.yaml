@@ -2,4 +2,4 @@ cluster:
   name: dev-cluster01
   environment: dev
   server: https://kubernetes.default.svc
-  project: default
+  project: gitops
