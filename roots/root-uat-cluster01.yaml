@@ -11,14 +11,14 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/YOUR_ORG/multi-cluster-multi-apps-poc.git
+    repoURL: https://github.com/msnops/multi-cluster-multi-apps-poc.git
     targetRevision: main
     path: platform/appset
     helm:
       releaseName: root-uat-cluster01
       values: |
         clusterName: uat-cluster01
-        repoURL: https://github.com/YOUR_ORG/multi-cluster-multi-apps-poc.git
+        repoURL: https://github.com/msnops/multi-cluster-multi-apps-poc.git
         targetRevision: main
         gitopsNamespace: harness-gitops
         applicationSet:

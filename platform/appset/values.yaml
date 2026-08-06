@@ -1,5 +1,5 @@
 clusterName: ""
-repoURL: https://github.com/YOUR_ORG/multi-cluster-multi-apps-poc.git
+repoURL: https://github.com/msnops/multi-cluster-multi-apps-poc.git
 targetRevision: main
 gitopsNamespace: harness-gitops
 
