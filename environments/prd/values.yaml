@@ -1,0 +1,10 @@
+# Layer 2: common defaults for every application in PRD.
+global:
+  environment: prd
+
+replicaCount: 3
+
+image:
+  pullPolicy: IfNotPresent
+
+message: "Hello from PRD environment defaults"

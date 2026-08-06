@@ -1,0 +1,5 @@
+cluster:
+  name: uat-cluster01
+  environment: uat
+  server: https://kubernetes.default.svc
+  project: default

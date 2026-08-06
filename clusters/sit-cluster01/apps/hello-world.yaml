@@ -1,0 +1,6 @@
+app:
+  name: hello-world
+  chartPath: applications/hello-world
+  namespace: hello-world
+  releaseName: hello-world
+  valuesFile: hello-world.yaml

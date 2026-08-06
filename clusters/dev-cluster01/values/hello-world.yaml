@@ -1,0 +1,6 @@
+# Layer 3: dev-cluster01 override; highest precedence.
+global:
+  clusterName: dev-cluster01
+
+replicaCount: 2
+message: "Hello from dev-cluster01 cluster override"
