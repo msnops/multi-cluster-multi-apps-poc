@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: {{ include "cluster-appset.fullname" . }}
     app.kubernetes.io/part-of: harness-gitops
     gitops.harness.io/cluster: {{ .Values.clusterName | quote }}
-    gitops.harness.io/gitops-agent-id: {{ .Values.clusterName | quote }}
+    gitops.harness.io/gitops-agent-id: "cluster1"
     argocd.argoproj.io/sync-wave: "0"
 spec:
   goTemplate: true
