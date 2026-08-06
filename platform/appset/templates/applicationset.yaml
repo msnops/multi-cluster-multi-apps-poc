@@ -45,7 +45,7 @@ spec:
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
-      project: '{{`{{ .cluster.project }}`}}'
+      project: "1d7264c7"
       sources:
         # Helm chart source. Values are applied in order; the last file wins.
         - repoURL: {{ .Values.repoURL | quote }}
