@@ -1,0 +1,22 @@
+replicaCount: 2
+message: "Hello from dev-cluster01 cluster override"
+
+ingress:
+  enabled: true 
+
+  ingressClassName: nginx
+
+  host: app.dwlprd1.sp.fisglobal.com 
+
+  path: /hello-world
+  pathType: Prefix
+
+smokeTest:
+  enabled: true
+
+  host: app.dwlprd1.sp.fisglobal.com
+  # Assuming that we dont have DNS record and needs a way to test using ALB IP
+  ip: 34.194.221.57
+  scheme: https
+
+  expectedText: hello

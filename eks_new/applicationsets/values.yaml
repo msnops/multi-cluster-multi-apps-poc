@@ -1,0 +1,15 @@
+clusterName: ""
+gitopsAgentId: ""
+gitopsNamespace: argocd
+repoURL: ""
+targetRevision: main
+
+applicationSet:
+  requeueAfterSeconds: 60
+  preserveResourcesOnDeletion: false
+
+environmentApps: []
+
+clusterApps:
+  additional: []
+  disabled: []

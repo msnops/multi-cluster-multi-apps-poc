@@ -1,0 +1,8 @@
+cluster:
+  name: eks-ptp-nv-prd-1
+  environment: prd
+  server: https://kubernetes.default.svc
+  project: 1102062e
+  gitopsAgentId: harnessgitops
+applications:
+  - hello-world

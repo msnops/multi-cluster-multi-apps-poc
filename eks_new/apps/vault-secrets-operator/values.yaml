@@ -1,0 +1,38 @@
+# Values for apps/vault-secrets-operator
+# This app owns VSO infrastructure only:
+# - HashiCorp Vault Secrets Operator deployment and CRDs through chart dependency
+# - VaultConnection resources
+# - ServiceAccount/vault-auth in allowed workload namespaces
+# - VaultAuth resources for own and shared Vault namespaces
+#
+# This app must NOT create business/application VaultStaticSecret resources.
+# Those belong to apps/platform-secrets.
+
+cluster:
+  name: ""
+
+vault:
+  address: "https://hcv.fiscloudservices.com"
+  # Optional TLS settings. Keep skipTLSVerify false unless your HCV endpoint requires otherwise.
+  skipTLSVerify: false
+  # caCertSecretRef: "hcv-ca-cert"
+  # tlsServerName: "hcv.fiscloudservices.com"
+  namespacePrefix: CaaS-Parent/A18708-FIS_Post_Trade_Processing_Platform
+
+vsoInfrastructure:
+  vaultConnectionName: default
+  serviceAccountName: vault-auth
+  authMount: jwt
+
+  # Namespace-local mode is intentionally used here.
+  # A VaultConnection/default is created in each allowed EKS namespace.
+  # This avoids cross-namespace reference ambiguity and keeps platform-secrets
+  # focused only on VaultStaticSecret creation.
+  createVaultConnectionInEachNamespace: true
+
+
+# Values passed to the upstream HashiCorp chart dependency.
+# Adjust these if you already have standard settings for VSO.
+vault-secrets-operator:
+  defaultVaultConnection:
+    enabled: false

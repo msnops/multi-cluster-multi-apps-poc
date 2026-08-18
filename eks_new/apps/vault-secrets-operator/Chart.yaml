@@ -1,0 +1,12 @@
+apiVersion: v2
+name: vault-secrets-operator
+description: Installs HashiCorp Vault Secrets Operator and creates EKS-side VSO auth infrastructure
+# This chart wraps the official HashiCorp Vault Secrets Operator chart and owns
+# VaultConnection, ServiceAccount, and VaultAuth resources.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+dependencies:
+  - name: vault-secrets-operator
+    version: "0.10.0"
+    repository: "https://helm.releases.hashicorp.com"

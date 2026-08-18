@@ -1,0 +1,9 @@
+app:
+  name: storageclass
+  namespace: kube-system
+
+  chartPath: eks/apps/storageclass
+
+  releaseName: storageclass
+
+  valuesFile: storageclass.yaml

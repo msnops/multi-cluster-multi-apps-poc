@@ -1,0 +1,10 @@
+# Layer 2: common defaults for every application in SIT.
+global:
+  environment: sit
+
+replicaCount: 2
+
+image:
+  pullPolicy: IfNotPresent
+
+message: "Hello from SIT environment defaults"
