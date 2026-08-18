@@ -28,10 +28,6 @@ spec:
                 #- path: eks/clusters/*/cluster_values.yaml
                 - path: eks_new/clusters/{{ .Values.clusterName }}/cluster_values.yaml
 
-              selector:
-                matchLabels:
-                  cluster.gitopsAgentId: {{ .Values.gitopsAgentId }}
-
           #
           # APPS
           #
