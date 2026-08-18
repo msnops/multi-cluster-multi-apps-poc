@@ -1,0 +1,14 @@
+gitopsNamespace: argocd
+
+gitopsAgentId: ptp-agent
+
+repoURL: https://github.com/company/platform-gitops.git
+targetRevision: main
+
+applicationSet:
+  preserveResourcesOnDeletion: true
+  requeueAfterSeconds: 60
+
+enabledApps:
+  cluster-autoscaler: false
+  hello-world: true

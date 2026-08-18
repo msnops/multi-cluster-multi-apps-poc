@@ -1,2 +1,0 @@
-replicaCount: 2
-message: "Hello from dev-cluster01 cluster override"

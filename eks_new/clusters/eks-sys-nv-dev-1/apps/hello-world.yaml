@@ -1,6 +1,0 @@
-app:
-  name: hello-world
-  chartPath: eks/apps/hello-world
-  namespace: hello-world
-  releaseName: hello-world
-  valuesFile: hello-world.yaml
