@@ -1,0 +1,26 @@
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: {{ .Values.targetGroups.https.name }}
+  namespace: nginx-ingress
+spec:
+  ipAddressType: ipv4
+
+  networking:
+    ingress:
+      - from:
+          - securityGroup:
+              groupID: {{ .Values.nlbSecurityGroup }}
+        ports:
+          - port: 30443
+            protocol: TCP
+
+  serviceRef:
+    name: nginx-ingress-controller
+    port: 443
+
+  targetGroupName: {{ .Values.targetGroups.https.name }}
+
+  targetType: instance
+
+  vpcID: {{ .Values.vpcId }}

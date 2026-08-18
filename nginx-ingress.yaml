@@ -1,0 +1,30 @@
+nginx-ingress:
+  controller:
+    autoscaling:
+      enabled: true
+      maxReplicas: 4
+      minReplicas: 2
+      targetCPUUtilizationPercentage: 80
+      targetMemoryUtilizationPercentage: 80
+
+    defaultTLS:
+      secret: nginx-ingress/nginx-default-tls
+
+    wildcardTLS:
+      secret: nginx-ingress/nginx-default-tls
+
+    image:
+      repository: ptp-docker-dev.docker.fis.dev/nginx/nginx-ingress
+
+    nginxplus: false
+
+    service:
+      externalTrafficPolicy: Cluster
+      type: NodePort
+      httpPort:
+        nodePort: 30080
+      httpsPort:
+        nodePort: 30443
+
+    serviceAccount:
+      imagePullSecretName: artifactory-regcred

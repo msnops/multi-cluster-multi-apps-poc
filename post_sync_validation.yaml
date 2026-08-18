@@ -1,0 +1,32 @@
+{{- if .Values.smokeTest.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: smoke-test
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+
+      containers:
+      - name: smoke-test
+        image: curlimages/curl:latest
+
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Testing {{ .Values.smokeTest.host }}"
+
+          RESPONSE=$(curl -ks \
+            --resolve {{ .Values.smokeTest.host }}:443:{{ .Values.smokeTest.ip }} \
+            {{ .Values.smokeTest.scheme }}://{{ .Values.smokeTest.host }}/hello-world)
+
+          echo "$RESPONSE"
+
+          echo "$RESPONSE" | grep -i "{{ .Values.smokeTest.expectedText }}"
+
+          echo "Smoke test passed"
+{{- end }}

@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wait-for-aws-lbc
+
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+
+      serviceAccountName: default
+
+      containers:
+      - name: wait
+        image: bitnami/kubectl:latest
+
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for AWS Load Balancer Controller..."
+
+          kubectl wait \
+            --for=condition=Available \
+            deployment/aws-load-balancer-controller \
+            -n kube-system \
+            --timeout=600s
+
+          echo "AWS Load Balancer Controller is ready"

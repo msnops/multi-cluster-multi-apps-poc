@@ -1,0 +1,34 @@
+namespaces:
+  monitoring: {}
+
+global:
+  environment: prd
+
+vault:
+  address: https://hcv.fiscloudservices.com
+
+argocd:
+  syncWaves:
+    namespaces: "-30"
+    vaultSecretsOperator: "-20"
+    platformSecrets: "-10"
+    applications: "0"
+
+serviceAccount:
+  name: vault-auth
+
+artifactory:
+  dockerRegistry: ptp-docker-snapshot-local.docker.fis.dev
+  dockerUsername: svcacct-ptp-caas-snapshot
+  dockerPasswordKey: token
+
+nginxIngress:
+  requiredSecrets:
+    - artifactory-regcred
+    - nginx-default-tls
+
+enabledApps:
+  namespaces: true
+  storageclass: true
+  nginx-ingress: true
+  cluster-autoscaler: true
