@@ -1,6 +1,6 @@
 cluster:
   name: cluster1
-  environment: prd
+  environment: dev
   server: https://kubernetes.default.svc
   project: 1d7264c7
   gitopsAgentId: cluster1
