@@ -1,52 +1,70 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
+
 metadata:
-  name: gitops-agent-{{ .Values.gitopsAgentId }}
-  namespace: {{ .Values.gitopsNamespace }}
+  name: gitops-agent-{{ required "gitopsAgentId is required" .Values.gitopsAgentId | lower | replace "_" "-" }}
+  namespace: {{ required "gitopsNamespace is required" .Values.gitopsNamespace }}
 
 spec:
   goTemplate: true
+
   goTemplateOptions:
     - missingkey=error
 
   syncPolicy:
-    preserveResourcesOnDeletion: {{ .Values.applicationSet.preserveResourcesOnDeletion }}
+    preserveResourcesOnDeletion: {{ .Values.applicationSet.preserveResourcesOnDeletion | default false }}
 
   generators:
     - matrix:
         generators:
 
           #
-          # CLUSTERS
+          # CLUSTER
+          #
+          # The root Application passes clusterName into this Helm chart.
+          # The Git generator then reads that cluster's cluster_values.yaml.
           #
           - git:
-              repoURL: {{ .Values.repoURL | quote }}
-              revision: {{ .Values.targetRevision | quote }}
-              requeueAfterSeconds: {{ .Values.applicationSet.requeueAfterSeconds }}
+              repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
+              revision: {{ .Values.targetRevision | default "main" | quote }}
+              requeueAfterSeconds: {{ .Values.applicationSet.requeueAfterSeconds | default 60 }}
 
               files:
-                #- path: eks/clusters/*/cluster_values.yaml
-                - path: eks_new/clusters/{{ .Values.clusterName }}/cluster_values.yaml
+                - path: eks_new/clusters/{{ required "clusterName is required" .Values.clusterName }}/cluster_values.yaml
 
           #
-          # APPS
+          # APPLICATIONS
+          #
+          # Effective app set =
+          #
+          # environmentApps
+          # + clusterApps.additional
+          # - clusterApps.disabled
           #
           - git:
-              repoURL: {{ .Values.repoURL | quote }}
-              revision: {{ .Values.targetRevision | quote }}
-              requeueAfterSeconds: {{ .Values.applicationSet.requeueAfterSeconds }}
+              repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
+              revision: {{ .Values.targetRevision | default "main" | quote }}
+              requeueAfterSeconds: {{ .Values.applicationSet.requeueAfterSeconds | default 60 }}
 
               files:
 {{- $apps := dict }}
-{{- range .Values.environmentApps }}
+
+{{- range (.Values.environmentApps | default list) }}
 {{- $_ := set $apps . true }}
 {{- end }}
-{{- range .Values.clusterApps.additional }}
+
+{{- range (.Values.clusterApps.additional | default list) }}
 {{- $_ := set $apps . true }}
 {{- end }}
-{{- range .Values.clusterApps.disabled }}
+
+{{- range (.Values.clusterApps.disabled | default list) }}
 {{- $_ := unset $apps . }}
 {{- end }}
+
+{{- if eq (len $apps) 0 }}
+{{- fail "No applications enabled. Check environmentApps and clusterApps values." }}
+{{- end }}
+
 {{- range $app := keys $apps | sortAlpha }}
                 - path: eks_new/app-catalog/{{ $app }}.yaml
 {{- end }}
@@ -68,8 +86,12 @@ spec:
       project: '{{`{{ .cluster.project }}`}}'
 
       sources:
-        - repoURL: {{ .Values.repoURL | quote }}
-          targetRevision: {{ .Values.targetRevision | quote }}
+
+        #
+        # Application chart
+        #
+        - repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
+          targetRevision: {{ .Values.targetRevision | default "main" | quote }}
           path: '{{`{{ .app.chartPath }}`}}'
 
           helm:
@@ -78,12 +100,27 @@ spec:
             ignoreMissingValueFiles: true
 
             valueFiles:
+
+              #
+              # Layer 1: application defaults
+              #
               - values.yaml
+
+              #
+              # Layer 2: environment defaults
+              #
               - '$values/eks_new/environments/{{`{{ .cluster.environment }}`}}/values.yaml'
+
+              #
+              # Layer 3: cluster/application overrides
+              #
               - '$values/eks_new/clusters/{{`{{ .cluster.name }}`}}/values/{{`{{ .app.valuesFile }}`}}'
 
-        - repoURL: {{ .Values.repoURL | quote }}
-          targetRevision: {{ .Values.targetRevision | quote }}
+        #
+        # Values repository
+        #
+        - repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
+          targetRevision: {{ .Values.targetRevision | default "main" | quote }}
           ref: values
 
       destination:
