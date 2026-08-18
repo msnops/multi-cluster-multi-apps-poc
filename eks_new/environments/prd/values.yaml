@@ -27,8 +27,8 @@ nginxIngress:
     - artifactory-regcred
     - nginx-default-tls
 
-enabledApps:
-  namespaces: true
-  storageclass: true
-  nginx-ingress: true
-  cluster-autoscaler: true
+environmentApps:
+  - namespaces
+  - storageclass
+  - nginx-ingress
+  - cluster-autoscaler

@@ -2,7 +2,7 @@ app:
   name: nginx-targetgroupbinding
   namespace: nginx-ingress
 
-  chartPath: eks/apps/nginx-targetgroupbinding
+  chartPath: eks-new/apps/nginx-targetgroupbinding
 
   releaseName: nginx-targetgroupbinding
 

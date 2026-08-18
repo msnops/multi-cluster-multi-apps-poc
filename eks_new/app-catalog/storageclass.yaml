@@ -2,7 +2,7 @@ app:
   name: storageclass
   namespace: kube-system
 
-  chartPath: eks/apps/storageclass
+  chartPath: eks-new/apps/storageclass
 
   releaseName: storageclass
 

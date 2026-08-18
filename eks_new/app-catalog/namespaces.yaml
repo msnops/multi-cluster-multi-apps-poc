@@ -1,6 +1,6 @@
 app:
   name: namespaces
   namespace: default
-  chartPath: eks/apps/namespaces
+  chartPath: eks-new/apps/namespaces
   releaseName: namespaces
   valuesFile: namespaces.yaml

@@ -1,9 +1,0 @@
-app:
-  name: nginx-targetgroupbinding
-  namespace: nginx-ingress
-
-  chartPath: eks/apps/nginx-targetgroupbinding
-
-  releaseName: nginx-targetgroupbinding
-
-  valuesFile: nginx-targetgroupbinding.yaml

@@ -1,6 +1,0 @@
-app:
-  name: cluster-autoscaler
-  namespace: kube-system
-  chartPath: eks/apps/cluster-autoscaler
-  releaseName: cluster-autoscaler
-  valuesFile: cluster-autoscaler.yaml

@@ -1,6 +1,0 @@
-app:
-  name: aws-load-balancer-controller
-  chartPath: eks/apps/aws-load-balancer-controller
-  namespace: kube-system
-  releaseName: aws-load-balancer-controller
-  valuesFile: aws-load-balancer-controller.yaml
