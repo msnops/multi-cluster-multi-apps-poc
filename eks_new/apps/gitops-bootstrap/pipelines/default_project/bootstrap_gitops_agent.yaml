@@ -84,6 +84,8 @@ pipeline:
                           REPO_BRANCH="main"
 
                           RELEASE_NAME="argocd"
+                          CHART_NAME="gitops-agent/gitops-helm"
+                          CHART_VERSION="1.2.8"
 
                           WORKDIR="$(mktemp -d)"
 
@@ -96,14 +98,17 @@ pipeline:
                           echo "=========================================="
                           echo "Harness GitOps Agent Bootstrap"
                           echo "=========================================="
-                          echo "Cluster      : ${CLUSTER_NAME}"
-                          echo "Environment  : ${ENVIRONMENT}"
-                          echo "Agent        : ${AGENT_ID}"
-                          echo "Namespace    : ${NAMESPACE}"
-                          echo "Account      : ${ACCOUNT_ID}"
-                          echo "Org          : ${ORG_ID}"
-                          echo "Project      : ${PROJECT_ID}"
-                          echo "Delegate     : <+pipeline.variables.delegateSelector>"
+                          echo "Cluster       : ${CLUSTER_NAME}"
+                          echo "Environment   : ${ENVIRONMENT}"
+                          echo "Agent         : ${AGENT_ID}"
+                          echo "Namespace     : ${NAMESPACE}"
+                          echo "Account       : ${ACCOUNT_ID}"
+                          echo "Org           : ${ORG_ID}"
+                          echo "Project       : ${PROJECT_ID}"
+                          echo "Delegate      : <+pipeline.variables.delegateSelector>"
+                          echo "Chart         : ${CHART_NAME}"
+                          echo "Chart Version : ${CHART_VERSION}"
+                          echo "Git Branch    : ${REPO_BRANCH}"
                           echo "=========================================="
 
                           echo
@@ -114,9 +119,15 @@ pipeline:
                           command -v git
 
                           echo
+                          echo "Tool versions..."
+
+                          kubectl version || true
+                          helm version
+                          git --version
+
+                          echo
                           echo "Checking Kubernetes access..."
 
-                          kubectl version
                           kubectl get nodes -o wide
 
                           echo
@@ -135,25 +146,56 @@ pipeline:
                           CLUSTER_VALUES="${WORKDIR}/repo/eks_new/clusters/${CLUSTER_NAME}/values/gitops-bootstrap.yaml"
 
                           echo
-                          echo "Default values:"
-                          echo "${DEFAULT_VALUES}"
-
-                          echo
-                          echo "Environment values:"
-                          echo "${ENV_VALUES}"
-
-                          echo
-                          echo "Cluster values:"
-                          echo "${CLUSTER_VALUES}"
+                          echo "=========================================="
+                          echo "VALUES FILE LOCATIONS"
+                          echo "=========================================="
+                          echo "Default     : ${DEFAULT_VALUES}"
+                          echo "Environment : ${ENV_VALUES}"
+                          echo "Cluster     : ${CLUSTER_VALUES}"
+                          echo "=========================================="
 
                           if [[ ! -f "${DEFAULT_VALUES}" ]]; then
+                            echo
                             echo "ERROR: Default values file does not exist:"
                             echo "${DEFAULT_VALUES}"
                             exit 1
                           fi
 
                           echo
-                          echo "Creating runtime identity values..."
+                          echo "=========================================="
+                          echo "VERIFYING DEFAULT VALUES"
+                          echo "=========================================="
+
+                          ls -l "${DEFAULT_VALUES}"
+
+                          echo
+                          echo "gitopsServerHost:"
+                          grep -n -A2 -B2 \
+                            'gitopsServerHost' \
+                            "${DEFAULT_VALUES}" || true
+
+                          echo
+                          echo "agentHttpTarget:"
+                          grep -n -A4 -B2 \
+                            'agentHttpTarget' \
+                            "${DEFAULT_VALUES}" || true
+
+                          echo
+                          echo "appsetReconcile:"
+                          grep -n -A2 -B2 \
+                            'appsetReconcile' \
+                            "${DEFAULT_VALUES}" || true
+
+                          echo
+                          echo "Configured GitOps Agent image:"
+                          grep -n -A4 -B4 \
+                            'v0.124.0' \
+                            "${DEFAULT_VALUES}" || true
+
+                          echo
+                          echo "=========================================="
+                          echo "CREATING RUNTIME IDENTITY VALUES"
+                          echo "=========================================="
 
                           cat > "${WORKDIR}/runtime-values.yaml" <<EOF
                           harness:
@@ -167,8 +209,12 @@ pipeline:
                             harnessName: "${CLUSTER_NAME}"
                           EOF
 
+                          cat "${WORKDIR}/runtime-values.yaml"
+
                           echo
-                          echo "Preparing secret files..."
+                          echo "=========================================="
+                          echo "PREPARING SECRETS"
+                          echo "=========================================="
 
                           printf '%s' "${AGENT_SECRET}" \
                             > "${WORKDIR}/agent-secret"
@@ -180,63 +226,79 @@ pipeline:
                             "${WORKDIR}/agent-secret" \
                             "${WORKDIR}/redis-password"
 
+                          echo "Agent secret file created."
+                          echo "Redis password file created."
+
                           echo
-                          echo "Building Helm values arguments..."
+                          echo "=========================================="
+                          echo "BUILDING HELM VALUES PRECEDENCE"
+                          echo "=========================================="
 
                           HELM_VALUES_ARGS=(
                             -f "${DEFAULT_VALUES}"
                           )
 
-                          if [[ -f "${ENV_VALUES}" ]]; then
-                            echo "Using environment override:"
-                            echo "${ENV_VALUES}"
+                          echo "1. defaults:"
+                          echo "   ${DEFAULT_VALUES}"
 
+                          if [[ -f "${ENV_VALUES}" ]]; then
                             HELM_VALUES_ARGS+=(
                               -f "${ENV_VALUES}"
                             )
+
+                            echo "2. environment override:"
+                            echo "   ${ENV_VALUES}"
                           else
-                            echo "No environment override found."
+                            echo "2. environment override: not found, skipping"
                           fi
 
                           if [[ -f "${CLUSTER_VALUES}" ]]; then
-                            echo "Using cluster override:"
-                            echo "${CLUSTER_VALUES}"
-
                             HELM_VALUES_ARGS+=(
                               -f "${CLUSTER_VALUES}"
                             )
+
+                            echo "3. cluster override:"
+                            echo "   ${CLUSTER_VALUES}"
                           else
-                            echo "No cluster-specific override found."
+                            echo "3. cluster override: not found, skipping"
                           fi
 
                           HELM_VALUES_ARGS+=(
                             -f "${WORKDIR}/runtime-values.yaml"
                           )
 
-                          echo
-                          echo "=========================================="
-                          echo "Values precedence"
-                          echo "=========================================="
-                          echo "1. defaults"
-                          echo "2. environment override, if present"
-                          echo "3. cluster override, if present"
-                          echo "4. runtime identity"
-                          echo "5. runtime secrets"
-                          echo "=========================================="
+                          echo "4. runtime identity:"
+                          echo "   ${WORKDIR}/runtime-values.yaml"
+
+                          echo "5. runtime secrets:"
+                          echo "   supplied with --set-file"
 
                           echo
-                          echo "Checking important default values..."
+                          echo "=========================================="
+                          echo "ENVIRONMENT OVERRIDE CONTENT"
+                          echo "=========================================="
 
-                          grep -n -A3 -B2 \
-                            'gitopsServerHost' \
-                            "${DEFAULT_VALUES}" || true
-
-                          grep -n -A5 -B2 \
-                            'agentHttpTarget' \
-                            "${DEFAULT_VALUES}" || true
+                          if [[ -f "${ENV_VALUES}" ]]; then
+                            cat "${ENV_VALUES}"
+                          else
+                            echo "No environment override."
+                          fi
 
                           echo
-                          echo "Adding Harness GitOps Helm repository..."
+                          echo "=========================================="
+                          echo "CLUSTER OVERRIDE CONTENT"
+                          echo "=========================================="
+
+                          if [[ -f "${CLUSTER_VALUES}" ]]; then
+                            cat "${CLUSTER_VALUES}"
+                          else
+                            echo "No cluster override."
+                          fi
+
+                          echo
+                          echo "=========================================="
+                          echo "ADDING HARNESS HELM REPOSITORY"
+                          echo "=========================================="
 
                           helm repo add gitops-agent \
                             https://harness.github.io/gitops-helm/ \
@@ -245,10 +307,21 @@ pipeline:
                           helm repo update gitops-agent
 
                           echo
-                          echo "Rendering Helm manifest for validation..."
+                          echo "=========================================="
+                          echo "VERIFYING CHART"
+                          echo "=========================================="
+
+                          helm show chart "${CHART_NAME}" \
+                            --version "${CHART_VERSION}"
+
+                          echo
+                          echo "=========================================="
+                          echo "RENDERING EFFECTIVE HELM MANIFEST"
+                          echo "=========================================="
 
                           helm template "${RELEASE_NAME}" \
-                            gitops-agent/gitops-helm \
+                            "${CHART_NAME}" \
+                            --version "${CHART_VERSION}" \
                             --namespace "${NAMESPACE}" \
                             "${HELM_VALUES_ARGS[@]}" \
                             --set-file harness.secrets.agentSecret="${WORKDIR}/agent-secret" \
@@ -256,38 +329,71 @@ pipeline:
                             > "${WORKDIR}/rendered.yaml"
 
                           echo
-                          echo "Checking rendered GitOps Agent target..."
+                          echo "=========================================="
+                          echo "RENDERED AGENT_HTTP_TARGET"
+                          echo "=========================================="
 
                           grep -n -A3 -B3 \
                             'AGENT_HTTP_TARGET' \
                             "${WORKDIR}/rendered.yaml" || true
 
                           echo
-                          echo "Checking rendered agent image..."
+                          echo "=========================================="
+                          echo "RENDERED APPSET RECONCILE"
+                          echo "=========================================="
 
-                          grep -n -A5 -B3 \
-                            'harness/gitops-agent' \
+                          grep -n -A3 -B3 \
+                            'GITOPS_AGENT_APPSET_RECONCILE_ENABLE' \
                             "${WORKDIR}/rendered.yaml" || true
 
                           echo
-                          echo "Helm rendering completed successfully."
+                          echo "=========================================="
+                          echo "RENDERED GITOPS AGENT IMAGE"
+                          echo "=========================================="
+
+                          grep -n -A4 -B4 \
+                            'harness/gitops-agent' \
+                            "${WORKDIR}/rendered.yaml" \
+                            | head -30 || true
 
                           echo
-                          echo "Installing/upgrading Harness GitOps Agent..."
+                          echo "=========================================="
+                          echo "VALIDATING AGENT_HTTP_TARGET"
+                          echo "=========================================="
+
+                          if ! grep -q 'AGENT_HTTP_TARGET.*https://app.harness.io' \
+                            "${WORKDIR}/rendered.yaml"; then
+
+                            echo
+                            echo "ERROR:"
+                            echo "AGENT_HTTP_TARGET was not rendered with the Harness SaaS URL."
+                            echo
+                            echo "Stopping before Helm installation."
+                            exit 1
+                          fi
+
+                          echo "AGENT_HTTP_TARGET validation passed."
+
+                          echo
+                          echo "=========================================="
+                          echo "INSTALLING / UPGRADING GITOPS AGENT"
+                          echo "=========================================="
 
                           helm upgrade --install "${RELEASE_NAME}" \
-                            gitops-agent/gitops-helm \
+                            "${CHART_NAME}" \
+                            --version "${CHART_VERSION}" \
                             --namespace "${NAMESPACE}" \
                             --create-namespace \
                             "${HELM_VALUES_ARGS[@]}" \
                             --set-file harness.secrets.agentSecret="${WORKDIR}/agent-secret" \
                             --set-file harness.secrets.redisPassword="${WORKDIR}/redis-password" \
+                            --set argo-cd.crds.install=false \
                             --wait \
                             --timeout 15m
 
                           echo
                           echo "=========================================="
-                          echo "Helm release"
+                          echo "HELM RELEASE"
                           echo "=========================================="
 
                           helm list \
@@ -295,7 +401,7 @@ pipeline:
 
                           echo
                           echo "=========================================="
-                          echo "Effective values"
+                          echo "HELM EFFECTIVE USER VALUES"
                           echo "=========================================="
 
                           helm get values "${RELEASE_NAME}" \
@@ -303,16 +409,25 @@ pipeline:
 
                           echo
                           echo "=========================================="
-                          echo "GitOps Agent ConfigMap"
+                          echo "DEPLOYED AGENT CONFIG"
                           echo "=========================================="
 
                           kubectl get configmap gitops-agent \
                             --namespace "${NAMESPACE}" \
-                            -o yaml || true
+                            -o jsonpath='Account={.data.GITOPS_ACCOUNT_IDENTIFIER}{"\n"}Org={.data.GITOPS_ORG_IDENTIFIER}{"\n"}Project={.data.GITOPS_PROJECT_IDENTIFIER}{"\n"}Agent={.data.GITOPS_AGENT_IDENTIFIER}{"\n"}HTTP_Target={.data.AGENT_HTTP_TARGET}{"\n"}AppSet_Reconcile={.data.GITOPS_AGENT_APPSET_RECONCILE_ENABLE}{"\n"}'
 
                           echo
                           echo "=========================================="
-                          echo "Pods"
+                          echo "DEPLOYED AGENT IMAGE"
+                          echo "=========================================="
+
+                          kubectl get deployment gitops-agent \
+                            --namespace "${NAMESPACE}" \
+                            -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+
+                          echo
+                          echo "=========================================="
+                          echo "PODS"
                           echo "=========================================="
 
                           kubectl get pods \
@@ -321,11 +436,21 @@ pipeline:
 
                           echo
                           echo "=========================================="
-                          echo "Deployments"
+                          echo "DEPLOYMENTS"
                           echo "=========================================="
 
                           kubectl get deployments \
                             --namespace "${NAMESPACE}"
+
+                          echo
+                          echo "=========================================="
+                          echo "GITOPS AGENT LOGS"
+                          echo "=========================================="
+
+                          kubectl logs \
+                            --namespace "${NAMESPACE}" \
+                            deployment/gitops-agent \
+                            --tail=50 || true
 
                           echo
                           echo "=========================================="
