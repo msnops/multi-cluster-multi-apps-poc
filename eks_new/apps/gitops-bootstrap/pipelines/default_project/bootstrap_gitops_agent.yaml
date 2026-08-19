@@ -126,20 +126,31 @@ pipeline:
 
                           CLUSTER_VALUES="${WORKDIR}/repo/eks_new/clusters/${CLUSTER_NAME}/values/gitops-bootstrap.yaml"
 
+                          echo
+                          echo "Default values: ${DEFAULT_VALUES}"
+                          echo "Environment values: ${ENV_VALUES}"
+                          echo "Cluster values: ${CLUSTER_VALUES}"
+
                           if [[ ! -f "${DEFAULT_VALUES}" ]]; then
-                            echo "ERROR: defaults file not found: ${DEFAULT_VALUES}"
+                            echo "ERROR: Default values file not found:"
+                            echo "${DEFAULT_VALUES}"
                             exit 1
                           fi
 
                           if [[ ! -f "${ENV_VALUES}" ]]; then
+                            echo "Environment override not found. Using empty values."
                             echo "{}" > "${WORKDIR}/empty-environment.yaml"
                             ENV_VALUES="${WORKDIR}/empty-environment.yaml"
                           fi
 
                           if [[ ! -f "${CLUSTER_VALUES}" ]]; then
+                            echo "Cluster override not found. Using empty values."
                             echo "{}" > "${WORKDIR}/empty-cluster.yaml"
                             CLUSTER_VALUES="${WORKDIR}/empty-cluster.yaml"
                           fi
+
+                          echo
+                          echo "Creating runtime identity values..."
 
                           cat > "${WORKDIR}/runtime-values.yaml" <<EOF
                           harness:
@@ -152,6 +163,22 @@ pipeline:
                           agent:
                             harnessName: "${CLUSTER_NAME}"
                           EOF
+
+                          echo
+                          echo "Preparing secret files..."
+
+                          printf '%s' "${AGENT_SECRET}" \
+                            > "${WORKDIR}/agent-secret"
+
+                          printf '%s' "${REDIS_PASSWORD}" \
+                            > "${WORKDIR}/redis-password"
+
+                          chmod 600 \
+                            "${WORKDIR}/agent-secret" \
+                            "${WORKDIR}/redis-password"
+
+                          echo
+                          echo "Adding Harness GitOps Helm repository..."
 
                           helm repo add gitops-agent \
                             https://harness.github.io/gitops-helm/ \
@@ -169,12 +196,15 @@ pipeline:
                             -f "${ENV_VALUES}" \
                             -f "${CLUSTER_VALUES}" \
                             -f "${WORKDIR}/runtime-values.yaml" \
-                            --set-string harness.secrets.agentSecret="${AGENT_SECRET}" \
-                            --set-string harness.secrets.redisPassword="${REDIS_PASSWORD}" \
+                            --set-file harness.secrets.agentSecret="${WORKDIR}/agent-secret" \
+                            --set-file harness.secrets.redisPassword="${WORKDIR}/redis-password" \
                             > /dev/null
 
                           echo
-                          echo "Installing/upgrading GitOps Agent..."
+                          echo "Helm rendering successful."
+
+                          echo
+                          echo "Installing/upgrading Harness GitOps Agent..."
 
                           helm upgrade --install gitops-agent \
                             gitops-agent/gitops-helm \
@@ -184,22 +214,34 @@ pipeline:
                             -f "${ENV_VALUES}" \
                             -f "${CLUSTER_VALUES}" \
                             -f "${WORKDIR}/runtime-values.yaml" \
-                            --set-string harness.secrets.agentSecret="${AGENT_SECRET}" \
-                            --set-string harness.secrets.redisPassword="${REDIS_PASSWORD}" \
+                            --set-file harness.secrets.agentSecret="${WORKDIR}/agent-secret" \
+                            --set-file harness.secrets.redisPassword="${WORKDIR}/redis-password" \
                             --wait \
                             --timeout 15m
 
                           echo
-                          echo "Helm releases:"
+                          echo "=========================================="
+                          echo "Helm release"
+                          echo "=========================================="
+
                           helm list -n "${NAMESPACE}"
 
                           echo
-                          echo "Pods:"
-                          kubectl get pods -n "${NAMESPACE}" -o wide
+                          echo "=========================================="
+                          echo "Pods"
+                          echo "=========================================="
+
+                          kubectl get pods \
+                            -n "${NAMESPACE}" \
+                            -o wide
 
                           echo
-                          echo "Deployments:"
-                          kubectl get deployments -n "${NAMESPACE}"
+                          echo "=========================================="
+                          echo "Deployments"
+                          echo "=========================================="
+
+                          kubectl get deployments \
+                            -n "${NAMESPACE}"
 
                           echo
                           echo "GitOps Agent bootstrap completed successfully."
