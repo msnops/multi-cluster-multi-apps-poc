@@ -1,6 +1,0 @@
-# Layer 3: sit-cluster01 override; highest precedence.
-global:
-  clusterName: sit-cluster01
-
-replicaCount: 3
-message: "Hello from sit-cluster01 cluster override"

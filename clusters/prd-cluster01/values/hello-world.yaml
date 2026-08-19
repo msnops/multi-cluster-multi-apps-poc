@@ -1,6 +1,0 @@
-# Layer 3: prd-cluster01 override; highest precedence.
-global:
-  clusterName: prd-cluster01
-
-replicaCount: 4
-message: "Hello from prd-cluster01 cluster override"

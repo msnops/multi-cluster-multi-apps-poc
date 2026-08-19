@@ -1,6 +1,0 @@
-app:
-  name: hello-world-blue
-  chartPath: applications/hello-world
-  namespace: hello-world-blue
-  releaseName: hello-world-blue
-  valuesFile: hello-world-blue.yaml

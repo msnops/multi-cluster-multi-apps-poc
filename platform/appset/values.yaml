@@ -1,8 +1,0 @@
-clusterName: ""
-repoURL: https://github.com/msnops/multi-cluster-multi-apps-poc.git
-targetRevision: main
-gitopsNamespace: harness-gitops
-
-applicationSet:
-  requeueAfterSeconds: 60
-  preserveResourcesOnDeletion: false

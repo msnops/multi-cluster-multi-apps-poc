@@ -1,6 +1,0 @@
-# A second generated Application using the same reusable chart.
-global:
-  clusterName: dev-cluster01
-
-replicaCount: 1
-message: "Hello from the blue application on dev-cluster01"

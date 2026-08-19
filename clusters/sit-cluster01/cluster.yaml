@@ -1,5 +1,0 @@
-cluster:
-  name: sit-cluster01
-  environment: sit
-  server: https://kubernetes.default.svc
-  project: default

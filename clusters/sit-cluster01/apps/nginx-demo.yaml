@@ -1,6 +1,0 @@
-app:
-  name: nginx-demo
-  namespace: nginx-demo
-  releaseName: nginx-demo
-  chartPath: applications/nginx-demo
-  valuesFile: nginx-demo.yaml

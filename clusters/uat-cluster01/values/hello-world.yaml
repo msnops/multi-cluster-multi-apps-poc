@@ -1,6 +1,0 @@
-# Layer 3: uat-cluster01 override; highest precedence.
-global:
-  clusterName: uat-cluster01
-
-replicaCount: 2
-message: "Hello from uat-cluster01 cluster override"

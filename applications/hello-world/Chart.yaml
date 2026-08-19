@@ -1,6 +1,0 @@
-apiVersion: v2
-name: hello-world
-description: Reusable hello-world sample Helm chart for Harness GitOps
-type: application
-version: 1.0.0
-appVersion: "1.0.0"
