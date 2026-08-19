@@ -1,0 +1,147 @@
+pipeline:
+  name: Bootstrap GitOps Agent
+  identifier: bootstrap_gitops_agent
+  orgIdentifier: ${org_id}
+  projectIdentifier: ${project_id}
+  tags: {}
+
+  variables:
+    - name: clusterName
+      type: String
+      required: true
+      value: <+input>
+
+    - name: gitopsAgentId
+      type: String
+      required: true
+      value: <+input>
+
+    - name: delegateSelector
+      type: String
+      required: true
+      value: <+input>
+
+    - name: namespace
+      type: String
+      required: true
+      value: <+input>
+
+    - name: agentYamlB64
+      type: String
+      required: true
+      value: <+input>
+
+  stages:
+    - stage:
+        name: Bootstrap GitOps Agent
+        identifier: Bootstrap_GitOps_Agent
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Deploy GitOps Agent
+                  identifier: Deploy_GitOps_Agent
+                  timeout: 15m
+
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+
+                    delegateSelectors:
+                      - <+pipeline.variables.delegateSelector>
+
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          CLUSTER_NAME="<+pipeline.variables.clusterName>"
+                          GITOPS_AGENT_ID="<+pipeline.variables.gitopsAgentId>"
+                          NAMESPACE="<+pipeline.variables.namespace>"
+
+                          WORKDIR="$(mktemp -d)"
+                          MANIFEST="$${WORKDIR}/gitops-agent.yaml"
+
+                          cleanup() {
+                            rm -rf "$${WORKDIR}"
+                          }
+
+                          trap cleanup EXIT
+
+                          echo "=========================================="
+                          echo "Harness GitOps Agent Deployment"
+                          echo "=========================================="
+                          echo "Cluster      : $${CLUSTER_NAME}"
+                          echo "GitOps Agent : $${GITOPS_AGENT_ID}"
+                          echo "Namespace    : $${NAMESPACE}"
+                          echo "Delegate     : <+pipeline.variables.delegateSelector>"
+                          echo "=========================================="
+
+                          echo
+                          echo "Checking Kubernetes access..."
+
+                          kubectl version
+                          kubectl get nodes
+
+                          echo
+                          echo "Decoding Harness generated manifest..."
+
+                          echo '<+pipeline.variables.agentYamlB64>' \
+                            | base64 --decode \
+                            > "$${MANIFEST}"
+
+                          if [ ! -s "$${MANIFEST}" ]; then
+                            echo "ERROR: GitOps Agent manifest is empty"
+                            exit 1
+                          fi
+
+                          echo
+                          echo "Manifest size:"
+                          wc -c "$${MANIFEST}"
+
+                          echo
+                          echo "Resources contained in manifest:"
+                          grep '^kind:' "$${MANIFEST}" || true
+
+                          echo
+                          echo "Ensuring namespace exists..."
+
+                          kubectl get namespace "$${NAMESPACE}" >/dev/null 2>&1 || \
+                            kubectl create namespace "$${NAMESPACE}"
+
+                          echo
+                          echo "Applying Harness GitOps Agent..."
+
+                          kubectl apply -f "$${MANIFEST}"
+
+                          echo
+                          echo "Resources in $${NAMESPACE}:"
+
+                          kubectl get all \
+                            --namespace "$${NAMESPACE}"
+
+                          echo
+                          echo "Waiting for deployments..."
+
+                          kubectl wait \
+                            --for=condition=Available \
+                            deployment \
+                            --all \
+                            --namespace "$${NAMESPACE}" \
+                            --timeout=600s
+
+                          echo
+                          echo "Pods:"
+
+                          kubectl get pods \
+                            --namespace "$${NAMESPACE}" \
+                            -o wide
+
+                          echo
+                          echo "Harness GitOps Agent deployment completed successfully."
+
+                    environmentVariables: []
+                    outputVariables: []

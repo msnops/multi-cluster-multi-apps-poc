@@ -1,0 +1,283 @@
+variable "harness_endpoint" {
+  description = "Harness API gateway endpoint."
+  type        = string
+  default     = "https://app.harness.io/gateway"
+}
+
+variable "harness_account_id" {
+  description = "Harness account identifier, not the display name."
+  type        = string
+}
+
+variable "harness_api_key" {
+  description = "Harness NextGen platform API key. Prefer TF_VAR_harness_platform_api_key."
+  type        = string
+  sensitive   = true
+}
+
+variable "harness_org_id" {
+  description = "Harness organization identifier."
+  type        = string
+  default     = "default"
+}
+
+variable "harness_project_id" {
+  description = "Harness project identifier."
+  type        = string
+  default     = "default_project"
+}
+
+variable "repo_url" {
+  description = "GitOps repository URL used by generators and generated Applications."
+  type        = string
+  default     = "https://github.com/msnops/multi-cluster-multi-apps-poc.git"
+}
+
+variable "target_revision" {
+  description = "Git revision used by generators and generated Applications."
+  type        = string
+  default     = "main"
+}
+
+#variable "cluster_name" {
+#  type = string
+#}
+
+variable "gitops_agent_id" {
+  type = string
+}
+
+variable "delegate_selector" {
+  type = string
+}
+
+variable "gitops_namespace" {
+  type    = string
+  default = "argocd"
+}
+
+variable "bootstrap_pipeline_id" {
+  type    = string
+  default = "bootstrap_gitops_agent"
+}
+
+# -------------------------------------------------------------------
+# GitHub provider configuration
+# -------------------------------------------------------------------
+
+variable "github_owner" {
+  description = "GitHub organization or repository owner."
+  type        = string
+  default     = "msnops"
+}
+
+variable "github_repository" {
+  description = "GitHub repository name without the owner."
+  type        = string
+  default     = "multi-cluster-multi-apps-poc"
+}
+
+variable "github_branch" {
+  description = "Git branch containing the ApplicationSet YAML files."
+  type        = string
+  default     = "main"
+}
+
+variable "github_app_id" {
+  description = "GitHub App identifier."
+  type        = string
+  sensitive   = true
+}
+
+variable "github_app_installation_id" {
+  description = "GitHub App installation identifier."
+  type        = string
+  sensitive   = true
+}
+
+variable "github_app_private_key_file" {
+  description = "Local filesystem path to the GitHub App private key PEM file."
+  type        = string
+  sensitive   = true
+}
+
+# -------------------------------------------------------------------
+# Harness GitOps repository registration
+# -------------------------------------------------------------------
+
+variable "manage_repository" {
+  description = "Create or update the GitOps repository registration for every configured agent."
+  type        = bool
+  default     = false
+}
+
+variable "repo_identifier" {
+  description = "Base Harness identifier for the GitOps repository registration."
+  type        = string
+  default     = "multi_cluster_multi_apps_poc"
+}
+
+variable "repo_name" {
+  description = "Display name for the Harness GitOps repository registration."
+  type        = string
+  default     = "multi-cluster-multi-apps-poc"
+}
+
+variable "repo_connection_type" {
+  description = "Repository connection type."
+  type        = string
+  default     = "HTTPS_ANONYMOUS"
+
+  validation {
+    condition = contains(
+      [
+        "HTTPS_ANONYMOUS",
+        "HTTPS",
+        "SSH",
+        "GITHUB",
+        "GITHUB_ENTERPRISE"
+      ],
+      var.repo_connection_type
+    )
+
+    error_message = "repo_connection_type must be HTTPS_ANONYMOUS, HTTPS, SSH, GITHUB, or GITHUB_ENTERPRISE."
+  }
+}
+
+variable "repo_username" {
+  description = "Repository username when HTTPS authentication is required."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "repo_password" {
+  description = "Repository PAT or password when HTTPS authentication is required."
+  type        = string
+  default     = null
+  nullable    = true
+  sensitive   = true
+}
+
+variable "repo_password_version" {
+  description = "Increment this value when rotating repo_password."
+  type        = number
+  default     = 1
+}
+
+variable "repo_ssh_private_key" {
+  description = "SSH private key when repo_connection_type is SSH."
+  type        = string
+  default     = null
+  nullable    = true
+  sensitive   = true
+}
+
+variable "repo_ssh_private_key_version" {
+  description = "Increment this value when rotating repo_ssh_private_key."
+  type        = number
+  default     = 1
+}
+
+# -------------------------------------------------------------------
+# One entry creates one first-class Harness ApplicationSet
+# -------------------------------------------------------------------
+
+variable "clusters" {
+  description = <<-EOT
+    Cluster-specific ApplicationSet configuration.
+
+    Each entry:
+      - selects the Harness GitOps agent
+      - identifies the ApplicationSet YAML in GitHub
+      - creates one first-class Harness ApplicationSet
+  EOT
+
+  type = map(object({
+    agent_id = string
+
+    applicationset_file = string
+
+    appset_name = optional(string)
+
+    gitops_namespace = optional(
+      string,
+      "argocd"
+    )
+
+    argo_project_id = string
+
+    cluster_file = optional(string)
+
+    applications_glob = optional(string)
+
+    preserve_resources_on_delete = optional(
+      bool,
+      false
+    )
+
+    applications_sync_policy = optional(
+      string,
+      "sync"
+    )
+
+    enable_service_env_labels = optional(
+      bool,
+      false
+    )
+  }))
+
+  validation {
+    condition = alltrue([
+      for cluster_name, cluster in var.clusters :
+      length(trimspace(cluster.agent_id)) > 0
+    ])
+
+    error_message = "Every cluster must have a non-empty agent_id."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster_name, cluster in var.clusters :
+      length(trimspace(cluster.applicationset_file)) > 0
+    ])
+
+    error_message = "Every cluster must have a non-empty applicationset_file."
+  }
+
+  validation {
+    condition = alltrue([
+      for cluster_name, cluster in var.clusters :
+      contains(
+        ["sync", "create-only", "create-update"],
+        cluster.applications_sync_policy
+      )
+    ])
+
+    error_message = "applications_sync_policy must be sync, create-only, or create-update."
+  }
+
+  default = {
+    "dev-cluster01" = {
+      agent_id = "cluster1"
+
+      applicationset_file = "terraform-appsets/dev-cluster01.yaml"
+
+      appset_name = "dev-cluster01-appset"
+
+      gitops_namespace = "argocd"
+
+      argo_project_id = "1d7264c7"
+
+      cluster_file = "clusters/dev-cluster01/cluster.yaml"
+
+      applications_glob = "clusters/dev-cluster01/apps/*.yaml"
+
+      preserve_resources_on_delete = false
+
+      applications_sync_policy = "sync"
+
+      enable_service_env_labels = false
+    }
+  }
+}
