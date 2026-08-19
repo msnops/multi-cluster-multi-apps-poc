@@ -28,8 +28,6 @@ SECRET_MANAGER_ID="${SECRET_MANAGER_ID:-harnessSecretManager}"
 
 BASE_URL="https://app.harness.io/ng/api/v2/secrets"
 
-QUERY="accountIdentifier=${HARNESS_ACCOUNT_ID}&orgIdentifier=${HARNESS_ORG_ID}&projectIdentifier=${HARNESS_PROJECT_ID}"
-
 PAYLOAD_FILE="$(mktemp)"
 CHECK_FILE="$(mktemp)"
 RESPONSE_FILE="$(mktemp)"
@@ -44,12 +42,12 @@ cleanup() {
 trap cleanup EXIT
 
 #
-# Read secret value without printing it.
+# Read secret without printing it.
 #
 SECRET_VALUE="$(cat "${SECRET_VALUE_FILE}")"
 
 #
-# JSON escaping helper.
+# Minimal JSON escaping.
 #
 json_escape() {
   local value="$1"
@@ -104,7 +102,7 @@ echo "=========================================="
 echo
 echo "Checking whether Harness secret exists..."
 
-HTTP_CODE=$(
+CHECK_HTTP_CODE=$(
   curl \
     --silent \
     --show-error \
@@ -112,57 +110,88 @@ HTTP_CODE=$(
     --write-out "%{http_code}" \
     --request GET \
     --header "x-api-key: ${HARNESS_API_KEY}" \
-    "${BASE_URL}/${SECRET_ID}?${QUERY}"
+    --get \
+    --data-urlencode "accountIdentifier=${HARNESS_ACCOUNT_ID}" \
+    --data-urlencode "orgIdentifier=${HARNESS_ORG_ID}" \
+    --data-urlencode "projectIdentifier=${HARNESS_PROJECT_ID}" \
+    --data-urlencode "identifiers=${SECRET_ID}" \
+    --data-urlencode "pageIndex=0" \
+    --data-urlencode "pageSize=10" \
+    "${BASE_URL}"
 )
 
-case "${HTTP_CODE}" in
+if [[ "${CHECK_HTTP_CODE}" -lt 200 || "${CHECK_HTTP_CODE}" -ge 300 ]]; then
+  echo "ERROR: Unable to query Harness secrets."
+  echo "HTTP status: ${CHECK_HTTP_CODE}"
 
-  200)
+  #
+  # Safe diagnostic: print only API error metadata.
+  #
+  grep -o '"message":"[^"]*"' "${CHECK_FILE}" || true
 
-    echo "Secret exists. Updating: ${SECRET_ID}"
+  exit 1
+fi
 
-    HTTP_CODE=$(
-      curl \
-        --silent \
-        --show-error \
-        --output "${RESPONSE_FILE}" \
-        --write-out "%{http_code}" \
-        --request PUT \
-        --header "x-api-key: ${HARNESS_API_KEY}" \
-        --header "Content-Type: application/json" \
-        --data-binary @"${PAYLOAD_FILE}" \
-        "${BASE_URL}/${SECRET_ID}?${QUERY}"
-    )
+#
+# We don't have jq, so use simple text matching.
+#
+# If the exact identifier appears in the response,
+# treat it as existing.
+#
+if grep -q "\"identifier\":\"${SECRET_ID}\"" "${CHECK_FILE}" \
+   || grep -q "\"identifier\": \"${SECRET_ID}\"" "${CHECK_FILE}"; then
 
-    ;;
+  SECRET_EXISTS=true
 
-  404)
+else
 
-    echo "Secret does not exist. Creating: ${SECRET_ID}"
+  SECRET_EXISTS=false
 
-    HTTP_CODE=$(
-      curl \
-        --silent \
-        --show-error \
-        --output "${RESPONSE_FILE}" \
-        --write-out "%{http_code}" \
-        --request POST \
-        --header "x-api-key: ${HARNESS_API_KEY}" \
-        --header "Content-Type: application/json" \
-        --data-binary @"${PAYLOAD_FILE}" \
-        "${BASE_URL}?${QUERY}"
-    )
+fi
 
-    ;;
+if [[ "${SECRET_EXISTS}" == "true" ]]; then
 
-  *)
+  echo "Secret exists. Updating: ${SECRET_ID}"
 
-    echo "ERROR: Unable to check Harness secret."
-    echo "HTTP status: ${HTTP_CODE}"
-    exit 1
+  HTTP_CODE=$(
+    curl \
+      --silent \
+      --show-error \
+      --output "${RESPONSE_FILE}" \
+      --write-out "%{http_code}" \
+      --request PUT \
+      --header "x-api-key: ${HARNESS_API_KEY}" \
+      --header "Content-Type: application/json" \
+      --data-binary @"${PAYLOAD_FILE}" \
+      --get \
+      --data-urlencode "accountIdentifier=${HARNESS_ACCOUNT_ID}" \
+      --data-urlencode "orgIdentifier=${HARNESS_ORG_ID}" \
+      --data-urlencode "projectIdentifier=${HARNESS_PROJECT_ID}" \
+      "${BASE_URL}/${SECRET_ID}"
+  )
 
-    ;;
-esac
+else
+
+  echo "Secret does not exist. Creating: ${SECRET_ID}"
+
+  HTTP_CODE=$(
+    curl \
+      --silent \
+      --show-error \
+      --output "${RESPONSE_FILE}" \
+      --write-out "%{http_code}" \
+      --request POST \
+      --header "x-api-key: ${HARNESS_API_KEY}" \
+      --header "Content-Type: application/json" \
+      --data-binary @"${PAYLOAD_FILE}" \
+      --get \
+      --data-urlencode "accountIdentifier=${HARNESS_ACCOUNT_ID}" \
+      --data-urlencode "orgIdentifier=${HARNESS_ORG_ID}" \
+      --data-urlencode "projectIdentifier=${HARNESS_PROJECT_ID}" \
+      "${BASE_URL}"
+  )
+
+fi
 
 if [[ "${HTTP_CODE}" -lt 200 || "${HTTP_CODE}" -ge 300 ]]; then
   echo "ERROR: Failed to create/update Harness secret."
@@ -170,9 +199,10 @@ if [[ "${HTTP_CODE}" -lt 200 || "${HTTP_CODE}" -ge 300 ]]; then
   echo "HTTP code : ${HTTP_CODE}"
 
   #
-  # Do not print RESPONSE_FILE because it may contain
-  # sensitive information.
+  # Print only Harness error message, not payload/secret.
   #
+  grep -o '"message":"[^"]*"' "${RESPONSE_FILE}" || true
+
   exit 1
 fi
 
