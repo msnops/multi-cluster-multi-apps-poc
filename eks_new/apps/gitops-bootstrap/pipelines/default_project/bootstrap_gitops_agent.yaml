@@ -57,7 +57,7 @@ pipeline:
 
                       - name: BOOTSTRAP_API_KEY
                         type: String
-                        value: <+secrets.getValue("account.gitops_bootstrap_api_key")>
+                        value: <+secrets.getValue("gitops_bootstrap_api_key")>
 
                     source:
                       type: Inline
