@@ -1,0 +1,60 @@
+pipeline:
+  name: Bootstrap GitOps Agent
+  identifier: bootstrap_gitops_agent
+  orgIdentifier: default
+  projectIdentifier: nonprod
+  tags: {}
+
+  variables:
+    - name: clusterName
+      type: String
+      value: <+input>
+
+    - name: environment
+      type: String
+      value: <+input>
+
+    - name: gitopsAgentId
+      type: String
+      value: <+input>
+
+    - name: delegateSelector
+      type: String
+      value: <+input>
+
+    - name: namespace
+      type: String
+      value: <+input>
+
+  stages:
+    - stage:
+        name: Bootstrap GitOps Agent
+        identifier: Bootstrap_GitOps_Agent
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Install GitOps Agent
+                  identifier: Install_GitOps_Agent
+                  timeout: 20m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+
+                    delegateSelectors:
+                      - <+pipeline.variables.delegateSelector>
+
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          echo "Cluster: <+pipeline.variables.clusterName>"
+                          echo "Environment: <+pipeline.variables.environment>"
+                          echo "Agent: <+pipeline.variables.gitopsAgentId>"
+                          echo "Namespace: <+pipeline.variables.namespace>"
+
+                          # Helm install logic goes here
