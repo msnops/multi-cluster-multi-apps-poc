@@ -180,17 +180,17 @@ pipeline:
                           echo
                           echo "Adding Harness GitOps Helm repository..."
 
-                          helm repo add gitops-agent \
+                          helm repo add argocd \
                             https://harness.github.io/gitops-helm/ \
                             --force-update
 
-                          helm repo update gitops-agent
+                          helm repo update argocd
 
                           echo
                           echo "Validating Helm rendering..."
 
-                          helm template gitops-agent \
-                            gitops-agent/gitops-helm \
+                          helm template argocd \
+                            argocd/gitops-helm \
                             --namespace "${NAMESPACE}" \
                             -f "${DEFAULT_VALUES}" \
                             -f "${ENV_VALUES}" \
@@ -206,8 +206,8 @@ pipeline:
                           echo
                           echo "Installing/upgrading Harness GitOps Agent..."
 
-                          helm upgrade --install gitops-agent \
-                            gitops-agent/gitops-helm \
+                          helm upgrade --install argocd \
+                            argocd/gitops-helm \
                             --namespace "${NAMESPACE}" \
                             --create-namespace \
                             -f "${DEFAULT_VALUES}" \
