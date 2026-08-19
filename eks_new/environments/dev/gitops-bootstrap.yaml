@@ -1,0 +1,27 @@
+# eks_new/environments/dev/gitops-bootstrap.yaml
+
+harness:
+  configMap:
+    logLevel: DEBUG
+
+argo-cd:
+  controller:
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 256Mi
+      limits:
+        cpu: "500m"
+        memory: 512Mi
+
+  applicationSet:
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 256Mi
+      limits:
+        cpu: "500m"
+        memory: 512Mi
+
+  repoServer:
+    replicas: 1
