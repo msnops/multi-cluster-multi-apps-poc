@@ -39,6 +39,7 @@ pipeline:
                   name: Install GitOps Agent
                   identifier: Install_GitOps_Agent
                   timeout: 20m
+
                   spec:
                     shell: Bash
                     onDelegate: true
@@ -52,9 +53,172 @@ pipeline:
                         script: |
                           set -euo pipefail
 
-                          echo "Cluster: <+pipeline.variables.clusterName>"
-                          echo "Environment: <+pipeline.variables.environment>"
-                          echo "Agent: <+pipeline.variables.gitopsAgentId>"
-                          echo "Namespace: <+pipeline.variables.namespace>"
+                          CLUSTER_NAME="<+pipeline.variables.clusterName>"
+                          ENVIRONMENT="<+pipeline.variables.environment>"
+                          AGENT_ID="<+pipeline.variables.gitopsAgentId>"
+                          NAMESPACE="<+pipeline.variables.namespace>"
 
-                          # Helm install logic goes here
+                          ACCOUNT_ID="<+account.identifier>"
+                          ORG_ID="<+org.identifier>"
+                          PROJECT_ID="<+project.identifier>"
+
+                          REPO_URL="https://github.com/msnops/multi-cluster-multi-apps-poc.git"
+                          REPO_BRANCH="main"
+
+                          WORKDIR="$(mktemp -d)"
+
+                          cleanup() {
+                            rm -rf "${WORKDIR}"
+                          }
+
+                          trap cleanup EXIT
+
+                          echo "=========================================="
+                          echo "Harness GitOps Agent Bootstrap"
+                          echo "=========================================="
+                          echo "Cluster      : ${CLUSTER_NAME}"
+                          echo "Environment  : ${ENVIRONMENT}"
+                          echo "Agent        : ${AGENT_ID}"
+                          echo "Namespace    : ${NAMESPACE}"
+                          echo "Account      : ${ACCOUNT_ID}"
+                          echo "Org          : ${ORG_ID}"
+                          echo "Project      : ${PROJECT_ID}"
+                          echo "Delegate     : <+pipeline.variables.delegateSelector>"
+                          echo "=========================================="
+
+                          echo
+                          echo "Checking required tools..."
+
+                          command -v kubectl
+                          command -v helm
+                          command -v git
+
+                          echo
+                          echo "Checking Kubernetes access..."
+
+                          kubectl version
+                          kubectl get nodes -o wide
+
+                          echo
+                          echo "Cloning GitOps repository from main..."
+
+                          git clone \
+                            --depth 1 \
+                            --branch "${REPO_BRANCH}" \
+                            "${REPO_URL}" \
+                            "${WORKDIR}/repo"
+
+                          DEFAULT_VALUES="${WORKDIR}/repo/eks_new/apps/gitops-bootstrap/values.yaml"
+
+                          ENV_VALUES="${WORKDIR}/repo/eks_new/environments/${ENVIRONMENT}/gitops-bootstrap.yaml"
+
+                          CLUSTER_VALUES="${WORKDIR}/repo/eks_new/clusters/${CLUSTER_NAME}/values/gitops-bootstrap.yaml"
+
+                          echo
+                          echo "Default values:"
+                          echo "${DEFAULT_VALUES}"
+
+                          echo
+                          echo "Environment values:"
+                          echo "${ENV_VALUES}"
+
+                          echo
+                          echo "Cluster values:"
+                          echo "${CLUSTER_VALUES}"
+
+                          if [[ ! -f "${DEFAULT_VALUES}" ]]; then
+                            echo "ERROR: defaults.yaml not found"
+                            exit 1
+                          fi
+
+                          if [[ ! -f "${ENV_VALUES}" ]]; then
+                            echo "{}" > "${WORKDIR}/empty-environment.yaml"
+                            ENV_VALUES="${WORKDIR}/empty-environment.yaml"
+                          fi
+
+                          if [[ ! -f "${CLUSTER_VALUES}" ]]; then
+                            echo "{}" > "${WORKDIR}/empty-cluster.yaml"
+                            CLUSTER_VALUES="${WORKDIR}/empty-cluster.yaml"
+                          fi
+
+                          echo
+                          echo "Creating runtime identity values..."
+
+                          cat > "${WORKDIR}/runtime-values.yaml" <<EOF
+                          harness:
+                            identity:
+                              accountIdentifier: "${ACCOUNT_ID}"
+                              orgIdentifier: "${ORG_ID}"
+                              projectIdentifier: "${PROJECT_ID}"
+                              agentIdentifier: "${AGENT_ID}"
+
+                          agent:
+                            harnessName: "${CLUSTER_NAME}"
+                          EOF
+
+                          echo
+                          echo "Creating runtime secret values..."
+
+                          cat > "${WORKDIR}/secret-values.yaml" <<'EOF'
+                          harness:
+                            secrets:
+                              agentSecret: "<+secrets.getValue("gitops_agent_secret")>"
+                              redisPassword: "<+secrets.getValue("gitops_redis_password")>"
+                          EOF
+
+                          chmod 600 "${WORKDIR}/secret-values.yaml"
+
+                          echo
+                          echo "Adding Harness GitOps Helm repository..."
+
+                          helm repo add gitops-agent \
+                            https://harness.github.io/gitops-helm/ \
+                            --force-update
+
+                          helm repo update gitops-agent
+
+                          echo
+                          echo "Validating Helm rendering..."
+
+                          helm template gitops-agent \
+                            gitops-agent/gitops-helm \
+                            --namespace "${NAMESPACE}" \
+                            -f "${DEFAULT_VALUES}" \
+                            -f "${ENV_VALUES}" \
+                            -f "${CLUSTER_VALUES}" \
+                            -f "${WORKDIR}/runtime-values.yaml" \
+                            -f "${WORKDIR}/secret-values.yaml" \
+                            > /dev/null
+
+                          echo
+                          echo "Installing/upgrading Harness GitOps Agent..."
+
+                          helm upgrade --install gitops-agent \
+                            gitops-agent/gitops-helm \
+                            --namespace "${NAMESPACE}" \
+                            --create-namespace \
+                            -f "${DEFAULT_VALUES}" \
+                            -f "${ENV_VALUES}" \
+                            -f "${CLUSTER_VALUES}" \
+                            -f "${WORKDIR}/runtime-values.yaml" \
+                            -f "${WORKDIR}/secret-values.yaml" \
+                            --wait \
+                            --timeout 15m
+
+                          echo
+                          echo "Helm release:"
+                          helm list -n "${NAMESPACE}"
+
+                          echo
+                          echo "Pods:"
+                          kubectl get pods -n "${NAMESPACE}" -o wide
+
+                          echo
+                          echo "Deployments:"
+                          kubectl get deployments -n "${NAMESPACE}"
+
+                          echo
+                          echo "GitOps Agent bootstrap completed successfully."
+
+                    environmentVariables: []
+                    outputVariables: []
