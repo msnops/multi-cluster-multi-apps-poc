@@ -1,0 +1,157 @@
+pipeline:
+  name: Bootstrap GitOps Agent
+  identifier: bootstrap_gitops_agent
+  tags: {}
+
+  variables:
+    - name: clusterName
+      type: String
+      description: Target Kubernetes cluster
+      required: true
+      value: <+input>
+
+    - name: gitopsAgentId
+      type: String
+      description: Harness GitOps Agent identifier
+      required: true
+      value: <+input>
+
+    - name: delegateSelector
+      type: String
+      description: Delegate selector for the target cluster
+      required: true
+      value: <+input>
+
+    - name: namespace
+      type: String
+      description: Namespace for Harness GitOps Agent
+      required: true
+      value: argocd
+
+  stages:
+    - stage:
+        name: Bootstrap GitOps Agent
+        identifier: Bootstrap_GitOps_Agent
+        type: Custom
+        spec:
+          execution:
+            steps:
+
+              - step:
+                  type: ShellScript
+                  name: Validate Target Cluster
+                  identifier: Validate_Target_Cluster
+                  timeout: 10m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+
+                    delegateSelectors:
+                      - <+pipeline.variables.delegateSelector>
+
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          CLUSTER_NAME="<+pipeline.variables.clusterName>"
+                          AGENT_ID="<+pipeline.variables.gitopsAgentId>"
+                          NAMESPACE="<+pipeline.variables.namespace>"
+
+                          echo "========================================"
+                          echo "Harness GitOps Agent Bootstrap"
+                          echo "========================================"
+                          echo "Cluster       : ${CLUSTER_NAME}"
+                          echo "GitOps Agent  : ${AGENT_ID}"
+                          echo "Namespace     : ${NAMESPACE}"
+                          echo "Delegate      : <+pipeline.variables.delegateSelector>"
+                          echo "========================================"
+
+                          echo
+                          echo "Checking kubectl..."
+                          command -v kubectl
+
+                          echo
+                          echo "Checking Kubernetes API access..."
+                          kubectl version
+
+                          echo
+                          echo "Current Kubernetes context:"
+                          kubectl config current-context || true
+
+                          echo
+                          echo "Cluster information:"
+                          kubectl cluster-info
+
+                          echo
+                          echo "Nodes:"
+                          kubectl get nodes -o wide
+
+                          echo
+                          echo "Checking target namespace..."
+
+                          if kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+                            echo "Namespace ${NAMESPACE} already exists."
+                          else
+                            echo "Namespace ${NAMESPACE} does not exist."
+                            echo "It will be created during GitOps Agent installation."
+                          fi
+
+                          echo
+                          echo "Delegate validation successful."
+
+                    environmentVariables: []
+                    outputVariables: []
+
+              - step:
+                  type: ShellScript
+                  name: Check Bootstrap Permissions
+                  identifier: Check_Bootstrap_Permissions
+                  timeout: 10m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+
+                    delegateSelectors:
+                      - <+pipeline.variables.delegateSelector>
+
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          NAMESPACE="<+pipeline.variables.namespace>"
+
+                          echo "Checking Kubernetes permissions required for bootstrap..."
+
+                          check_permission() {
+                            VERB="$1"
+                            RESOURCE="$2"
+
+                            if kubectl auth can-i "${VERB}" "${RESOURCE}" >/dev/null 2>&1; then
+                              echo "OK   ${VERB} ${RESOURCE}"
+                            else
+                              echo "FAIL ${VERB} ${RESOURCE}"
+                              exit 1
+                            fi
+                          }
+
+                          check_permission create namespaces
+                          check_permission create deployments
+                          check_permission create statefulsets
+                          check_permission create serviceaccounts
+                          check_permission create secrets
+                          check_permission create configmaps
+                          check_permission create roles
+                          check_permission create rolebindings
+                          check_permission create clusterroles
+                          check_permission create clusterrolebindings
+                          check_permission create customresourcedefinitions
+
+                          echo
+                          echo "Bootstrap permission validation completed."
+
+                    environmentVariables: []
+                    outputVariables: []
