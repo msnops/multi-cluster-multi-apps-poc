@@ -43,40 +43,66 @@ cleanup() {
 
 trap cleanup EXIT
 
+#
+# Read secret value without printing it.
+#
 SECRET_VALUE="$(cat "${SECRET_VALUE_FILE}")"
 
 #
-# Do NOT echo SECRET_VALUE.
+# JSON escaping helper.
 #
-jq -n \
-  --arg name "${SECRET_NAME}" \
-  --arg identifier "${SECRET_ID}" \
-  --arg org "${HARNESS_ORG_ID}" \
-  --arg project "${HARNESS_PROJECT_ID}" \
-  --arg manager "${SECRET_MANAGER_ID}" \
-  --arg value "${SECRET_VALUE}" \
-  '{
-    secret: {
-      type: "SecretText",
-      name: $name,
-      identifier: $identifier,
-      orgIdentifier: $org,
-      projectIdentifier: $project,
-      tags: {
-        managedBy: "gitops-bootstrap"
-      },
-      description: "Automatically managed GitOps Agent bootstrap secret",
-      spec: {
-        secretManagerIdentifier: $manager,
-        valueType: "Inline",
-        value: $value
-      }
+json_escape() {
+  local value="$1"
+
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+
+  printf '%s' "${value}"
+}
+
+ESCAPED_SECRET_NAME="$(json_escape "${SECRET_NAME}")"
+ESCAPED_SECRET_ID="$(json_escape "${SECRET_ID}")"
+ESCAPED_ORG_ID="$(json_escape "${HARNESS_ORG_ID}")"
+ESCAPED_PROJECT_ID="$(json_escape "${HARNESS_PROJECT_ID}")"
+ESCAPED_MANAGER_ID="$(json_escape "${SECRET_MANAGER_ID}")"
+ESCAPED_SECRET_VALUE="$(json_escape "${SECRET_VALUE}")"
+
+cat > "${PAYLOAD_FILE}" <<EOF
+{
+  "secret": {
+    "type": "SecretText",
+    "name": "${ESCAPED_SECRET_NAME}",
+    "identifier": "${ESCAPED_SECRET_ID}",
+    "orgIdentifier": "${ESCAPED_ORG_ID}",
+    "projectIdentifier": "${ESCAPED_PROJECT_ID}",
+    "tags": {
+      "managedBy": "gitops-bootstrap"
+    },
+    "description": "Automatically managed GitOps Agent bootstrap secret",
+    "spec": {
+      "secretManagerIdentifier": "${ESCAPED_MANAGER_ID}",
+      "valueType": "Inline",
+      "value": "${ESCAPED_SECRET_VALUE}"
     }
-  }' > "${PAYLOAD_FILE}"
+  }
+}
+EOF
 
 chmod 600 "${PAYLOAD_FILE}"
 
-echo "Checking Harness secret: ${SECRET_ID}"
+echo "=========================================="
+echo "Harness Secret Upsert"
+echo "=========================================="
+echo "Secret ID : ${SECRET_ID}"
+echo "Org       : ${HARNESS_ORG_ID}"
+echo "Project   : ${HARNESS_PROJECT_ID}"
+echo "=========================================="
+
+echo
+echo "Checking whether Harness secret exists..."
 
 HTTP_CODE=$(
   curl \
@@ -93,7 +119,7 @@ case "${HTTP_CODE}" in
 
   200)
 
-    echo "Secret exists. Updating ${SECRET_ID}."
+    echo "Secret exists. Updating: ${SECRET_ID}"
 
     HTTP_CODE=$(
       curl \
@@ -112,7 +138,7 @@ case "${HTTP_CODE}" in
 
   404)
 
-    echo "Secret does not exist. Creating ${SECRET_ID}."
+    echo "Secret does not exist. Creating: ${SECRET_ID}"
 
     HTTP_CODE=$(
       curl \
@@ -131,7 +157,7 @@ case "${HTTP_CODE}" in
 
   *)
 
-    echo "ERROR: Unable to check Harness secret ${SECRET_ID}."
+    echo "ERROR: Unable to check Harness secret."
     echo "HTTP status: ${HTTP_CODE}"
     exit 1
 
@@ -139,11 +165,17 @@ case "${HTTP_CODE}" in
 esac
 
 if [[ "${HTTP_CODE}" -lt 200 || "${HTTP_CODE}" -ge 300 ]]; then
-  echo "ERROR: Failed to create/update Harness secret ${SECRET_ID}."
-  echo "HTTP status: ${HTTP_CODE}"
+  echo "ERROR: Failed to create/update Harness secret."
+  echo "Secret ID : ${SECRET_ID}"
+  echo "HTTP code : ${HTTP_CODE}"
 
-  # Don't print response/payload because this operation contains a secret.
+  #
+  # Do not print RESPONSE_FILE because it may contain
+  # sensitive information.
+  #
   exit 1
 fi
 
-echo "Harness secret ${SECRET_ID} successfully stored."
+echo
+echo "Harness secret stored successfully."
+echo "Secret ID: ${SECRET_ID}"
