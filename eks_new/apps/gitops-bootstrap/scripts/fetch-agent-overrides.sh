@@ -20,7 +20,6 @@ for var in "${required_vars[@]}"; do
 done
 
 mkdir -p "${OUTPUT_DIR}"
-
 chmod 700 "${OUTPUT_DIR}"
 
 OVERRIDES_FILE="${OUTPUT_DIR}/harness-agent-overrides.yaml"
@@ -56,8 +55,6 @@ HTTP_CODE=$(
 if [[ "${HTTP_CODE}" -lt 200 || "${HTTP_CODE}" -ge 300 ]]; then
   echo "ERROR: Failed to retrieve Harness GitOps Agent overrides."
   echo "HTTP status: ${HTTP_CODE}"
-
-  # Don't print the response because it could contain sensitive material.
   exit 1
 fi
 
@@ -68,100 +65,85 @@ fi
 
 chmod 600 "${OVERRIDES_FILE}"
 
+echo "Harness override file retrieved successfully."
+
 #
-# Extract secrets without printing them.
+# Extract agentSecret.
 #
-# Harness's generated override file contains:
+# Expected:
 #
 # harness:
 #   secrets:
-#     agentSecret: ...
-#     redisPassword: ...
+#     agentSecret: xxxxx
 #
-python3 - \
-  "${OVERRIDES_FILE}" \
-  "${AGENT_SECRET_FILE}" \
-  "${REDIS_PASSWORD_FILE}" <<'PY'
+AGENT_SECRET=$(
+  awk '
+    /^[[:space:]]*agentSecret:[[:space:]]*/ {
+      sub(/^[[:space:]]*agentSecret:[[:space:]]*/, "")
+      print
+      exit
+    }
+  ' "${OVERRIDES_FILE}"
+)
 
-import sys
-import re
+#
+# Extract redisPassword.
+#
+REDIS_PASSWORD=$(
+  awk '
+    /^[[:space:]]*redisPassword:[[:space:]]*/ {
+      sub(/^[[:space:]]*redisPassword:[[:space:]]*/, "")
+      print
+      exit
+    }
+  ' "${OVERRIDES_FILE}"
+)
 
-source = sys.argv[1]
-agent_file = sys.argv[2]
-redis_file = sys.argv[3]
+#
+# Remove surrounding single/double quotes if present.
+#
+AGENT_SECRET=$(
+  printf '%s' "${AGENT_SECRET}" \
+    | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
+)
 
-agent_secret = None
-redis_password = None
+REDIS_PASSWORD=$(
+  printf '%s' "${REDIS_PASSWORD}" \
+    | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
+)
 
-with open(source, "r", encoding="utf-8") as f:
-    for line in f:
+if [[ -z "${AGENT_SECRET}" ]]; then
+  echo "ERROR: agentSecret was not found in Harness override YAML."
+  exit 1
+fi
 
-        match = re.match(
-            r'^\s*agentSecret:\s*(.*?)\s*$',
-            line
-        )
+if [[ -z "${REDIS_PASSWORD}" ]]; then
+  echo "ERROR: redisPassword was not found in Harness override YAML."
+  exit 1
+fi
 
-        if match and agent_secret is None:
-            agent_secret = match.group(1)
+#
+# Write secrets without printing them.
+#
+printf '%s' "${AGENT_SECRET}" \
+  > "${AGENT_SECRET_FILE}"
 
-        match = re.match(
-            r'^\s*redisPassword:\s*(.*?)\s*$',
-            line
-        )
-
-        if match and redis_password is None:
-            redis_password = match.group(1)
-
-def cleanup(value):
-    if value is None:
-        return None
-
-    value = value.strip()
-
-    if (
-        len(value) >= 2
-        and value[0] == value[-1]
-        and value[0] in ("'", '"')
-    ):
-        value = value[1:-1]
-
-    return value
-
-agent_secret = cleanup(agent_secret)
-redis_password = cleanup(redis_password)
-
-if not agent_secret:
-    raise SystemExit(
-        "ERROR: agentSecret was not found in Harness overrides"
-    )
-
-if not redis_password:
-    raise SystemExit(
-        "ERROR: redisPassword was not found in Harness overrides"
-    )
-
-with open(agent_file, "w", encoding="utf-8") as f:
-    f.write(agent_secret)
-
-with open(redis_file, "w", encoding="utf-8") as f:
-    f.write(redis_password)
-
-PY
+printf '%s' "${REDIS_PASSWORD}" \
+  > "${REDIS_PASSWORD_FILE}"
 
 chmod 600 \
   "${AGENT_SECRET_FILE}" \
   "${REDIS_PASSWORD_FILE}"
 
 #
-# Harness Agent token is expected to contain valid Base64.
+# Validate the GitOps Agent token.
 #
 if ! base64 --decode "${AGENT_SECRET_FILE}" >/dev/null 2>&1; then
-  echo "ERROR: Harness generated agentSecret is not valid Base64."
+  echo "ERROR: Harness-generated agentSecret is not valid Base64."
   exit 1
 fi
 
-echo "Harness Agent overrides retrieved successfully."
-echo "Agent secret validated as Base64."
-echo "Redis password retrieved successfully."
-echo
+echo "Agent secret extracted successfully."
+echo "Agent secret format: valid Base64."
+echo "Redis password extracted successfully."
 echo "No secret values were printed."
