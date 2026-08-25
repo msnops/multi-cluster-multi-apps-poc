@@ -1,0 +1,246 @@
+pipeline:
+  name: Keyfactor Certificate Provisioning
+  identifier: Keyfactor_Certificate_Provisioning
+  projectIdentifier: YOUR_PROJECT
+  orgIdentifier: YOUR_ORG
+  tags: {}
+
+  variables:
+    - name: DEPLOY_ENV
+      type: String
+      description: dev, qa, uat, prod
+      value: <+input>
+
+    - name: CERT_CN
+      type: String
+      value: <+input>
+
+    - name: CERT_SANS
+      type: String
+      description: Comma separated DNS SANs
+      value: <+input>
+
+    - name: HCV_SECRET_PATH
+      type: String
+      description: Example certificates/my-service
+      value: <+input>
+
+    - name: KEYFACTOR_ENROLLMENT_PATTERN_ID
+      type: String
+      value: <+input>
+
+  stages:
+    - stage:
+        name: Certificate Provisioning
+        identifier: Certificate_Provisioning
+        type: Custom
+
+        # Both tags must match the selected delegate.
+        delegateSelectors:
+          - certificate-automation
+          - <+pipeline.variables.DEPLOY_ENV == "dev" ? "hcv-dev" : "hcv-nondev">
+
+        spec:
+          execution:
+            steps:
+
+              #
+              # Clone the GitHub repo containing the script.
+              #
+              - step:
+                  type: ShellScript
+                  name: Checkout Certificate Automation
+                  identifier: Checkout_Certificate_Automation
+                  timeout: 5m
+
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          set -Eeuo pipefail
+
+                          rm -rf /tmp/certificate-automation
+
+                          git clone \
+                            --depth 1 \
+                            --branch "${GIT_BRANCH}" \
+                            "https://${GITHUB_USERNAME}:${GITHUB_TOKEN}@github.com/YOUR_ORG/YOUR_REPO.git" \
+                            /tmp/certificate-automation
+
+                          chmod 700 \
+                            /tmp/certificate-automation/scripts/keyfactor-pfx-to-hcv.sh
+
+                    environmentVariables:
+                      - name: GIT_BRANCH
+                        type: String
+                        value: main
+
+                      - name: GITHUB_USERNAME
+                        type: String
+                        value: <+secrets.getValue("github_username")>
+
+                      - name: GITHUB_TOKEN
+                        type: String
+                        value: <+secrets.getValue("github_token")>
+
+              #
+              # DEV
+              #
+              - step:
+                  type: ShellScript
+                  name: Provision Certificate DEV
+                  identifier: Provision_Certificate_DEV
+                  timeout: 10m
+
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.DEPLOY_ENV> == "dev"
+
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          exec /tmp/certificate-automation/scripts/keyfactor-pfx-to-hcv.sh
+
+                    environmentVariables:
+
+                      - name: DEPLOY_ENV
+                        type: String
+                        value: <+pipeline.variables.DEPLOY_ENV>
+
+                      - name: CERT_CN
+                        type: String
+                        value: <+pipeline.variables.CERT_CN>
+
+                      - name: CERT_SANS
+                        type: String
+                        value: <+pipeline.variables.CERT_SANS>
+
+                      - name: HCV_SECRET_PATH
+                        type: String
+                        value: <+pipeline.variables.HCV_SECRET_PATH>
+
+                      - name: KEYFACTOR_ENROLLMENT_PATTERN_ID
+                        type: String
+                        value: <+pipeline.variables.KEYFACTOR_ENROLLMENT_PATTERN_ID>
+
+                      #
+                      # Central Keyfactor
+                      #
+                      - name: KEYFACTOR_URL
+                        type: String
+                        value: https://keyfactor.company.com
+
+                      #
+                      # These are Harness secret references backed by DEV HCV.
+                      #
+                      - name: KEYFACTOR_USERNAME
+                        type: String
+                        value: <+secrets.getValue("kf_dev_username")>
+
+                      - name: KEYFACTOR_PASSWORD
+                        type: String
+                        value: <+secrets.getValue("kf_dev_password")>
+
+                      #
+                      # DEV HCV
+                      #
+                      - name: HCV_ADDR
+                        type: String
+                        value: https://dev-vault.example.com:8200
+
+                      - name: HCV_NAMESPACE
+                        type: String
+                        value: admin/dev
+
+                      - name: HCV_KV_MOUNT
+                        type: String
+                        value: secret
+
+                      - name: HCV_TOKEN
+                        type: String
+                        value: <+secrets.getValue("hcv_dev_token")>
+
+              #
+              # NONDEV
+              #
+              - step:
+                  type: ShellScript
+                  name: Provision Certificate NONDEV
+                  identifier: Provision_Certificate_NONDEV
+                  timeout: 10m
+
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.DEPLOY_ENV> != "dev"
+
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          exec /tmp/certificate-automation/scripts/keyfactor-pfx-to-hcv.sh
+
+                    environmentVariables:
+
+                      - name: DEPLOY_ENV
+                        type: String
+                        value: <+pipeline.variables.DEPLOY_ENV>
+
+                      - name: CERT_CN
+                        type: String
+                        value: <+pipeline.variables.CERT_CN>
+
+                      - name: CERT_SANS
+                        type: String
+                        value: <+pipeline.variables.CERT_SANS>
+
+                      - name: HCV_SECRET_PATH
+                        type: String
+                        value: <+pipeline.variables.HCV_SECRET_PATH>
+
+                      - name: KEYFACTOR_ENROLLMENT_PATTERN_ID
+                        type: String
+                        value: <+pipeline.variables.KEYFACTOR_ENROLLMENT_PATTERN_ID>
+
+                      - name: KEYFACTOR_URL
+                        type: String
+                        value: https://keyfactor.company.com
+
+                      #
+                      # Backed by NONDEV HCV.
+                      #
+                      - name: KEYFACTOR_USERNAME
+                        type: String
+                        value: <+secrets.getValue("kf_nondev_username")>
+
+                      - name: KEYFACTOR_PASSWORD
+                        type: String
+                        value: <+secrets.getValue("kf_nondev_password")>
+
+                      - name: HCV_ADDR
+                        type: String
+                        value: https://nondev-vault.example.com:8200
+
+                      - name: HCV_NAMESPACE
+                        type: String
+                        value: admin/platform
+
+                      - name: HCV_KV_MOUNT
+                        type: String
+                        value: secret
+
+                      - name: HCV_TOKEN
+                        type: String
+                        value: <+secrets.getValue("hcv_nondev_token")>
