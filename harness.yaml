@@ -1,0 +1,299 @@
+  pipeline:
+  name: SYS GitOps Bootstrap
+  identifier: sys_gitops_bootstrap
+  orgIdentifier: FIS_Post_Trade_Processing_Platfor
+  projectIdentifier: PTPInfrastructurePrd
+
+  variables:
+    - name: gitops_agent_identifier
+      type: String
+      value: <+input>
+
+    - name: harness_api_key
+      type: Secret
+      value: org.sys-harness-svc-pat
+
+  stages:
+    - stage:
+        name: Deploy
+        identifier: Deploy
+        type: Deployment
+
+        variables:
+          - name: overrideYaml
+            type: String
+            value: ""
+        spec:
+          deploymentType: NativeHelm
+
+          service:
+            serviceRef: sys_gitops_agent
+
+          environment:
+            environmentRef: prd
+
+            infrastructureDefinitions:
+              - identifier: eks_ptp_nv_prd_1_infra
+
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: DeployGitOpsAgent
+                  identifier: DeployGitOpsAgent
+                  timeout: 20m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+                          set +x
+
+                          APP_ID="3340691"
+                          INSTALLATION_ID="122999979"
+
+                          REPO_OWNER="Capital-Markets"
+                          REPO_NAME="PTP-sys-management"
+                          REPO_BRANCH="eks_bootstrap"
+
+                          WORK_DIR="/tmp/gitops-bootstrap-<+pipeline.executionId>"
+                          REPO_DIR="${WORK_DIR}/${REPO_NAME}"
+                          CHART_DIR="${REPO_DIR}/gitops-bootstrap/charts/gitops-helm"
+
+                          NAMESPACE="sys-gitops"
+                          RELEASE_NAME="argocd"
+
+                          PRIVATE_KEY_FILE="${WORK_DIR}/github-app-private-key.pem"
+                          JWT_RESPONSE_FILE="${WORK_DIR}/github-token-response.json"
+                          RUNTIME_VALUES_FILE="${WORK_DIR}/runtime-values.yaml"
+
+                          cleanup() {
+                            rm -f "${PRIVATE_KEY_FILE}" "${JWT_RESPONSE_FILE}"
+                          }
+
+                          trap cleanup EXIT
+
+                          echo "AGENT_ID=[<+pipeline.variables.gitops_agent_identifier>]"
+                          echo "ACCOUNT=[<+account.identifier>]"
+                          echo "ORG=[<+org.identifier>]"
+                          echo "PROJECT=[<+project.identifier>]"
+
+                          rm -rf "${WORK_DIR}"
+                          mkdir -p "${WORK_DIR}"
+
+                          chmod 700 "${WORK_DIR}"
+
+                          cat > "${PRIVATE_KEY_FILE}" <<'PRIVATE_KEY_EOF'
+                          <+secrets.getValue("org.sys_github_app_private_key")>
+                          PRIVATE_KEY_EOF
+
+                          chmod 600 "${PRIVATE_KEY_FILE}"
+
+                          if ! openssl pkey \
+                            -in "${PRIVATE_KEY_FILE}" \
+                            -noout \
+                            >/dev/null 2>&1; then
+                            echo "ERROR: GitHub App private key is not a valid PEM private key."
+                            exit 1
+                          fi
+
+                          base64url() {
+                            openssl base64 -A |
+                              tr '+/' '-_' |
+                              tr -d '='
+                          }
+
+                          NOW="$(date +%s)"
+                          IAT="$((NOW - 60))"
+                          EXP="$((NOW + 540))"
+
+                          JWT_HEADER="$(
+                            printf '%s' '{"alg":"RS256","typ":"JWT"}' |
+                              base64url
+                          )"
+
+                          JWT_PAYLOAD="$(
+                            printf '{"iat":%s,"exp":%s,"iss":"%s"}' \
+                              "${IAT}" \
+                              "${EXP}" \
+                              "${APP_ID}" |
+                              base64url
+                          )"
+
+                          JWT_SIGNATURE="$(
+                            printf '%s' "${JWT_HEADER}.${JWT_PAYLOAD}" |
+                              openssl dgst \
+                                -sha256 \
+                                -sign "${PRIVATE_KEY_FILE}" \
+                                -binary |
+                              base64url
+                          )"
+
+                          JWT="${JWT_HEADER}.${JWT_PAYLOAD}.${JWT_SIGNATURE}"
+
+                          HTTP_STATUS="$(
+                            curl \
+                              --silent \
+                              --show-error \
+                              --location \
+                              --request POST \
+                              --output "${JWT_RESPONSE_FILE}" \
+                              --write-out '%{http_code}' \
+                              --header "Authorization: Bearer ${JWT}" \
+                              --header "Accept: application/vnd.github+json" \
+                              --header "X-GitHub-Api-Version: 2022-11-28" \
+                              "https://api.github.com/app/installations/${INSTALLATION_ID}/access_tokens"
+                          )"
+
+                          if [ "${HTTP_STATUS}" != "201" ]; then
+                            echo "ERROR: GitHub App token request failed."
+                            echo "HTTP status: ${HTTP_STATUS}"
+
+                            jq -r '
+                              if type == "object" then
+                                {
+                                  message: .message,
+                                  documentation_url: .documentation_url
+                                }
+                              else
+                                .
+                              end
+                            ' "${JWT_RESPONSE_FILE}" 2>/dev/null || true
+
+                            exit 1
+                          fi
+
+                          TOKEN="$(
+                            jq -er '.token' "${JWT_RESPONSE_FILE}"
+                          )"
+
+                          if [ -z "${TOKEN}" ]; then
+                            echo "ERROR: GitHub returned an empty installation token."
+                            exit 1
+                          fi
+
+                          echo "Cloning ${REPO_OWNER}/${REPO_NAME}, branch ${REPO_BRANCH}..."
+
+                          AUTH_HEADER="$(
+                            printf 'x-access-token:%s' "${TOKEN}" |
+                              openssl base64 -A
+                          )"
+
+                          git \
+                            -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_HEADER}" \
+                            clone \
+                            --branch "${REPO_BRANCH}" \
+                            --single-branch \
+                            --depth 1 \
+                            "https://github.com/${REPO_OWNER}/${REPO_NAME}.git" \
+                            "${REPO_DIR}"
+
+                          unset TOKEN
+                          unset AUTH_HEADER
+                          unset JWT
+                          unset JWT_SIGNATURE
+
+                          echo "Repository cloned successfully."
+
+                          if [ ! -f "${CHART_DIR}/Chart.yaml" ]; then
+                            echo "ERROR: Chart.yaml was not found at:"
+                            echo "${CHART_DIR}"
+
+                            echo "Available Chart.yaml files:"
+                            find "${REPO_DIR}" \
+                              -type f \
+                              -name Chart.yaml \
+                              -print 2>/dev/null || true
+
+                            exit 1
+                          fi
+
+                          echo "Using Helm chart:"
+                          echo "${CHART_DIR}"
+
+                          echo "Chart metadata:"
+                          helm show chart "${CHART_DIR}"
+
+                          #
+                          # Select your existing values file from the repository.
+                          #
+                          # Change this path if your file has a different name.
+                          #
+                          BASE_VALUES_FILE="${CHART_DIR}/values.yaml"
+
+                          if [ ! -f "${BASE_VALUES_FILE}" ]; then
+                            echo "ERROR: Base values file was not found:"
+                            echo "${BASE_VALUES_FILE}"
+
+                            echo "Available values files:"
+                            find "${REPO_DIR}" \
+                              -type f \
+                              \( -name "values.yaml" -o -name "*values*.yaml" \) \
+                              -print 2>/dev/null || true
+
+                            exit 1
+                          fi
+
+                          #
+                          # Optional runtime overrides.
+                          #
+                          # This remains a valid Helm values file. Do not download
+                          # deploy.yaml from the Harness GitOps API into this file.
+                          #
+                          curl -L -s \
+                            -H "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>" \
+                            -o "${RUNTIME_VALUES_FILE}" \
+                            "https://app.harness.io/gitops/api/v1/agents/<+pipeline.variables.gitops_agent_identifier>/deploy.yaml?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>&namespace=sys-gitops"
+
+                          cat >> "${RUNTIME_VALUES_FILE}" <<EOF
+                          global:
+                            nodeSelector:
+                              eks.amazonaws.com/nodegroup: eks-ptp-nv-prd-1-m7i_2cpu_8gb-1c-614edfa6ec0aecb4f85de80cc7
+                          EOF
+
+                          echo "Base values file:"
+                          echo "${BASE_VALUES_FILE}"
+
+                          echo "Runtime values file:"
+                          cat "${RUNTIME_VALUES_FILE}"
+
+                          #helm lint "${CHART_DIR}" \
+                          #  --namespace "${NAMESPACE}" \
+                          #  --values "${BASE_VALUES_FILE}" \
+                          #  --values "${RUNTIME_VALUES_FILE}"
+
+                            #kubectl create namespace "${NAMESPACE}" \
+                            #--dry-run=client \
+                            #--output yaml |
+                            #kubectl apply -f -
+
+                          echo "Deploying helm chart:"
+                          helm upgrade \
+                            --install "${RELEASE_NAME}" \
+                            "${CHART_DIR}" \
+                            --namespace "${NAMESPACE}" \
+                            --create-namespace \
+                            --values "${RUNTIME_VALUES_FILE}" \
+                            --wait \
+                            --timeout 15m \
+                            --atomic
+
+                          echo "Helm release:"
+                          helm list --namespace "${NAMESPACE}"
+
+                          echo "GitOps Agent resources:"
+                          kubectl get pods \
+                            --namespace "${NAMESPACE}" \
+                            --output wide
+
+          rollbackSteps: []
+
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
