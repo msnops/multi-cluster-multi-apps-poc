@@ -1,3 +1,9 @@
+{"content":[{"accountIdentifier":"XzgUIuZXRMWymCzLKYZpCg","projectIdentifier":"PTPInfrastructurePrd","orgIdentifier":"FIS_Post_Trade_Processing_Platfor","identifier":"test","name":"test","metadata":{"namespace":"sys-gitops","mappedProjects":{}},"type":"MANAGED_ARGO_PROVIDER","createdAt":"2026-09-07T23:19:28Z","lastModifiedAt":"2026-09-07T23:19:28Z","scope":"PROJECT","operator":"ARGO"}],"totalPages":1,"totalItems":1,"pageItemCount":1,"pageSize":10}kasturim@CPC-Madhu-3Q41X:testing_tf$
+
+
+
+
+
 C:\Users\e5738591>kubectl logs gitops-agent-c58f85d49-ffdz4 -n sys-gitops
 time="2026-09-07T16:10:30Z" level=info msg="redis compression will be set to 'gzip'"
 {"level":"error","msg":"redis client created","time":"2026-09-07T16:10:30Z"}
