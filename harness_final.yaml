@@ -83,6 +83,31 @@ pipeline:
                             nodeSelector:
                               eks.amazonaws.com/nodegroup: eks-ptp-nv-prd-1-m7i_2cpu_8gb-1c-614edfa6ec0aecb4f85de80cc7
                           EOF
+                          echo "Uploading runtime values to Harness File Store..."
+
+                          UPLOAD_STATUS="$(
+                            curl \
+                              --silent \
+                              --show-error \
+                              --location \
+                              --output "${FILESTORE_RESPONSE}" \
+                              --write-out '%{http_code}' \
+                              --request POST \
+                              "https://app.harness.io/ng/api/file-store/yaml?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>" \
+                              --header "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>" \
+                              --header "Content-Type: application/yaml" \
+                              --data-binary @"${RUNTIME_VALUES_FILE}"
+                          )"
+                          
+                          if [[ "${UPLOAD_STATUS}" != "200" && "${UPLOAD_STATUS}" != "201" ]]; then
+                            echo "ERROR: Harness File Store upload failed."
+                            echo "HTTP status: ${UPLOAD_STATUS}"
+                          
+                            jq -r '.message // .' "${FILESTORE_RESPONSE}" 2>/dev/null || true
+                            exit 1
+                          fi
+                          
+                          echo "Runtime values uploaded successfully."
 
                           #
                           # Update:
