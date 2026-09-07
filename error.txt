@@ -1,3 +1,85 @@
+Retrieve helm manifest from release [gitops-agent] and namespace [sys-gitops]
+Executing command - KUBECONFIG=/opt/harness-delegate/repository/helm/.kube/c2efaff91f8f94a48a0fa3b484fc4566 helm get manifest gitops-agent --namespace=sys-gitops
+
+kubectl --kubeconfig=/opt/harness-delegate/repository/helm/.kube/c2efaff91f8f94a48a0fa3b484fc4566 get events --namespace=sys-gitops --output=custom-columns=KIND:involvedObject.kind,NAME:.involvedObject.name,NAMESPACE:.involvedObject.namespace,MESSAGE:.message,REASON:.reason --watch-only
+
+kubectl --kubeconfig=/opt/harness-delegate/repository/helm/.kube/c2efaff91f8f94a48a0fa3b484fc4566 rollout status Deployment/argocd-applicationset-controller --namespace=sys-gitops --watch=true
+
+
+Status : argocd-applicationset-controller   Waiting for deployment "argocd-applicationset-controller" rollout to finish: 0 of 1 updated replicas are available...
+Event  : argocd-application-controller      Pod    argocd-application-controller-0   sys-gitops   Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "fd2d9df05ef1ba01c6daf5b8f0d35825b2553ecea665dd08cc84e6d31dbd47bb": plugin type="aws-cni" name="aws-cni" failed (add): add cmd: failed to assign an IP address to container   FailedCreatePodSandBox
+Event  : argocd-redis                       Pod    argocd-redis-dc7db4fcf-mdjkx      sys-gitops   Created container: redis                                                                                                                                                                                                                                                         Created
+Event  : argocd-redis                       Pod    argocd-redis-dc7db4fcf-mdjkx      sys-gitops   Started container redis                                                                                                                                                                                                                                                          Started
+Event  : gitops-agent                       Pod    gitops-agent-c58f85d49-rsfqz      sys-gitops   MountVolume.SetUp failed for volume "ssh-known-hosts" : failed to sync configmap cache: timed out waiting for the condition                                                                                                                                                      FailedMount
+Event  : argocd-repo-server                 Pod    gitops-agent-c58f85d49-rsfqz      sys-gitops   MountVolume.SetUp failed for volume "argocd-repo-server-tls" : failed to sync secret cache: timed out waiting for the condition                                                                                                                                                  FailedMount
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7   sys-gitops   MountVolume.SetUp failed for volume "gpg-keys" : failed to sync configmap cache: timed out waiting for the condition                                                                                                                                                             FailedMount
+Event  : gitops-agent                       Pod    gitops-agent-c58f85d49-rsfqz          sys-gitops   MountVolume.SetUp failed for volume "kube-api-access-5cwnb" : failed to sync configmap cache: timed out waiting for the condition                                                                                                                                                FailedMount
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7   sys-gitops   MountVolume.SetUp failed for volume "tls-certs" : failed to sync configmap cache: timed out waiting for the condition                                                                                                                                                            FailedMount
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7   sys-gitops   MountVolume.SetUp failed for volume "kube-api-access-mr6dh" : failed to sync configmap cache: timed out waiting for the condition                                                                                                                                                FailedMount
+Event  : gitops-agent                       Pod    gitops-agent-c58f85d49-rsfqz          sys-gitops   Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "89cebbb123e3f30b8a40a1f76356730b563434e5a126faa5eb8968b0f9e7b00c": plugin type="aws-cni" name="aws-cni" failed (add): add cmd: failed to assign an IP address to container   FailedCreatePodSandBox
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7   sys-gitops   Pulling image "docker.io/harness/argocd:v2.14.9"                                                                                                                                                                                                                                 Pulling
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7   sys-gitops   Successfully pulled image "docker.io/harness/argocd:v2.14.9" in 178ms (178ms including waiting). Image size: 185797699 bytes.                                                                                                                                                    Pulled
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7   sys-gitops   Created container: copyutil                                                                                                                                                                                                                                                      Created
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7   sys-gitops   Started container copyutil                                                                                                                                                                                                                                                       Started
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7   sys-gitops   Container image "harness/gitops-agent-installer-helper:v0.0.3" already present on machine                                                                                                                                                                                        Pulled
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7   sys-gitops   Created container: sops-helm-secrets-tool                                                                                                                                                                                                                                        Created
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7   sys-gitops   Started container sops-helm-secrets-tool                                                                                                                                                                                                                                         Started
+Event  : argocd-applicationset-controller   Pod    argocd-applicationset-controller-8c6d95765-xqzqt   sys-gitops   Successfully pulled image "docker.io/harness/argocd:v2.14.9" in 3.449s (3.449s including waiting). Image size: 185797699 bytes.                                                                                                                                                  Pulled
+Event  : argocd-applicationset-controller   Pod    argocd-applicationset-controller-8c6d95765-xqzqt   sys-gitops   Created container: applicationset-controller                                                                                                                                                                                                                                     Created
+Event  : argocd-applicationset-controller   Pod    argocd-applicationset-controller-8c6d95765-xqzqt   sys-gitops   Started container applicationset-controller                                                                                                                                                                                                                                      Started
+
+Status : argocd-applicationset-controller   deployment "argocd-applicationset-controller" successfully rolled out
+kubectl --kubeconfig=/opt/harness-delegate/repository/helm/.kube/c2efaff91f8f94a48a0fa3b484fc4566 rollout status Deployment/argocd-repo-server --namespace=sys-gitops --watch=true
+
+
+Status : argocd-repo-server                 Waiting for deployment "argocd-repo-server" rollout to finish: 0 of 1 updated replicas are available...
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7                sys-gitops   Pulling image "docker.io/harness/argocd:v2.14.9"                                                                                                                                                                                                                                 Pulling
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7                sys-gitops   Successfully pulled image "docker.io/harness/argocd:v2.14.9" in 145ms (145ms including waiting). Image size: 185797699 bytes.                                                                                                                                                    Pulled
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7                sys-gitops   Created container: repo-server                                                                                                                                                                                                                                                   Created
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7                sys-gitops   Started container repo-server                                                                                                                                                                                                                                                    Started
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7                sys-gitops   Container image "harness/gitops-agent-installer-helper:v0.0.3" already present on machine                                                                                                                                                                                        Pulled
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7                sys-gitops   Created container: argocd-harness-plugin                                                                                                                                                                                                                                         Created
+Event  : argocd-repo-server                 Pod    argocd-repo-server-85d98cc4c7-7fqq7                sys-gitops   Started container argocd-harness-plugin                                                                                                                                                                                                                                          Started
+Event  : argocd-application-controller      Pod    argocd-application-controller-0                    sys-gitops   Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "123ffebc88c80dbdb880a3d64c17d5d86a723df9c5735cd6d4783230d4cd2cbb": plugin type="aws-cni" name="aws-cni" failed (add): add cmd: failed to assign an IP address to container   FailedCreatePodSandBox
+Event  : gitops-agent                       Pod    gitops-agent-c58f85d49-rsfqz                       sys-gitops   Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "6be87717f57bea4e9843f26f80d7c3c9dbbde938770311db554c262ea7d1ad47": plugin type="aws-cni" name="aws-cni" failed (add): add cmd: failed to assign an IP address to container   FailedCreatePodSandBox
+
+Status : argocd-repo-server                 deployment "argocd-repo-server" successfully rolled out
+kubectl --kubeconfig=/opt/harness-delegate/repository/helm/.kube/c2efaff91f8f94a48a0fa3b484fc4566 rollout status Deployment/argocd-server --namespace=sys-gitops --watch=true
+
+
+Status : argocd-server                      deployment "argocd-server" successfully rolled out
+kubectl --kubeconfig=/opt/harness-delegate/repository/helm/.kube/c2efaff91f8f94a48a0fa3b484fc4566 rollout status Deployment/argocd-redis --namespace=sys-gitops --watch=true
+
+
+Status : argocd-redis                       deployment "argocd-redis" successfully rolled out
+kubectl --kubeconfig=/opt/harness-delegate/repository/helm/.kube/c2efaff91f8f94a48a0fa3b484fc4566 rollout status Deployment/gitops-agent --namespace=sys-gitops --watch=true
+
+
+Status : gitops-agent                       Waiting for deployment "gitops-agent" rollout to finish: 0 of 1 updated replicas are available...
+Event  : argocd-application-controller      Pod    argocd-application-controller-0                    sys-gitops   Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "93a67d9b2dea04ec1606216efc819273286c7aadcb4686259eaf19b7675d8599": plugin type="aws-cni" name="aws-cni" failed (add): add cmd: failed to assign an IP address to container   FailedCreatePodSandBox
+Event  : gitops-agent                       Pod    gitops-agent-c58f85d49-rsfqz                       sys-gitops   Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "5ceb19118ec57f662f5cd76daa77d281c6d179e6eec8dbe9ff054e40bae22499": plugin type="aws-cni" name="aws-cni" failed (add): add cmd: failed to assign an IP address to container   FailedCreatePodSandBox
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+===================================
 commandType: is missing but it is required
 
 commandFlags: array found, string expected
