@@ -30,12 +30,6 @@ pipeline:
           execution:
             steps:
 
-              ############################################################
-              # STEP 1
-              # Download GitOps deploy.yaml and store it in Harness
-              # File Store as runtime Helm values
-              ############################################################
-
               - step:
                   type: ShellScript
                   name: Prepare GitOps Values
@@ -61,32 +55,30 @@ pipeline:
                           WORK_DIR="/tmp/gitops-bootstrap-<+pipeline.executionId>"
 
                           VALUES_FILE="${WORK_DIR}/gitops-runtime-values.yaml"
-                          FILESTORE_RESPONSE="${WORK_DIR}/filestore-response.json"
-                          FILESTORE_CHECK_RESPONSE="${WORK_DIR}/filestore-check-response.json"
-
-                          FILESTORE_IDENTIFIER="sys_gitops_agent_runtime_values"
-                          FILESTORE_NAME="sys-gitops-agent-runtime-values.yaml"
-                          FILESTORE_PARENT="Root"
+                          RESPONSE_FILE="${WORK_DIR}/response.json"
 
                           FILESTORE_BASE_URL="https://app.harness.io/ng/api/file-store"
 
                           FILESTORE_QUERY="accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>"
 
+                          FOLDER_IDENTIFIER="gitops_runtime"
+                          FOLDER_NAME="gitops-runtime"
+
+                          FILE_IDENTIFIER="sys_gitops_agent_values"
+                          FILE_NAME="sys-gitops-agent-values.yaml"
+
                           mkdir -p "${WORK_DIR}"
                           chmod 700 "${WORK_DIR}"
 
                           cleanup() {
-                            rm -f \
-                              "${VALUES_FILE}" \
-                              "${FILESTORE_RESPONSE}" \
-                              "${FILESTORE_CHECK_RESPONSE}"
+                            rm -rf "${WORK_DIR}"
                           }
 
                           trap cleanup EXIT
 
 
                           ################################################
-                          # 1. Download deploy.yaml
+                          # 1. Download deploy.yaml from Harness GitOps
                           ################################################
 
                           echo
@@ -110,7 +102,7 @@ pipeline:
                           fi
 
                           if [ ! -s "${VALUES_FILE}" ]; then
-                            echo "ERROR: downloaded GitOps values file is empty."
+                            echo "ERROR: Downloaded GitOps values file is empty."
                             exit 1
                           fi
 
@@ -118,11 +110,11 @@ pipeline:
 
 
                           ################################################
-                          # 2. Add runtime overrides
+                          # 2. Append node selector
                           ################################################
 
                           echo
-                          echo "Adding runtime overrides..."
+                          echo "Adding runtime nodeSelector..."
 
                           cat >> "${VALUES_FILE}" <<'EOF'
 
@@ -131,92 +123,125 @@ pipeline:
                               eks.amazonaws.com/nodegroup: eks-ptp-nv-prd-1-m7i_2cpu_8gb-1c-614edfa6ec0aecb4f85de80cc7
                           EOF
 
-                          echo "Runtime overrides added successfully."
-
-                          #
-                          # DO NOT print VALUES_FILE.
-                          #
-                          # deploy.yaml contains credentials/secrets.
-                          #
+                          echo "Runtime override added."
 
 
                           ################################################
-                          # 3. Check whether File Store object exists
+                          # 3. Check for gitops-runtime folder
                           ################################################
 
                           echo
-                          echo "Checking Harness File Store..."
+                          echo "Checking Harness File Store folder..."
 
-                          CHECK_STATUS="$(
+                          FOLDER_CHECK_STATUS="$(
                             curl \
                               --silent \
                               --show-error \
                               --location \
-                              --output "${FILESTORE_CHECK_RESPONSE}" \
+                              --output "${RESPONSE_FILE}" \
                               --write-out '%{http_code}' \
                               --request GET \
-                              "${FILESTORE_BASE_URL}/${FILESTORE_IDENTIFIER}?${FILESTORE_QUERY}" \
+                              "${FILESTORE_BASE_URL}/${FOLDER_IDENTIFIER}?${FILESTORE_QUERY}" \
                               --header "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>"
                           )"
 
-                          echo "File Store lookup HTTP status: ${CHECK_STATUS}"
-
 
                           ################################################
-                          # 4A. File does not exist - create
+                          # 4. Create folder when missing
                           ################################################
 
-                          if [ "${CHECK_STATUS}" = "404" ]; then
+                          if [ "${FOLDER_CHECK_STATUS}" = "404" ]; then
 
-                            echo
-                            echo "Runtime values file does not exist."
-                            echo "Creating Harness File Store entry..."
+                            echo "Creating File Store folder: /gitops-runtime"
 
-                            FILESTORE_STATUS="$(
+                            FOLDER_CREATE_STATUS="$(
                               curl \
                                 --silent \
                                 --show-error \
                                 --location \
-                                --output "${FILESTORE_RESPONSE}" \
+                                --output "${RESPONSE_FILE}" \
                                 --write-out '%{http_code}' \
                                 --request POST \
                                 "${FILESTORE_BASE_URL}?${FILESTORE_QUERY}" \
                                 --header "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>" \
-                                --form "identifier=${FILESTORE_IDENTIFIER}" \
-                                --form "name=${FILESTORE_NAME}" \
-                                --form "type=FILE" \
-                                --form "parentIdentifier=${FILESTORE_PARENT}" \
-                                --form "fileUsage=MANIFEST_FILE" \
-                                --form "mimeType=application/x-yaml" \
-                                --form "description=Runtime Helm values generated by Harness GitOps" \
-                                --form "content=@${VALUES_FILE};type=application/x-yaml"
+                                --form "identifier=${FOLDER_IDENTIFIER}" \
+                                --form "name=${FOLDER_NAME}" \
+                                --form "type=FOLDER" \
+                                --form "parentIdentifier=Root" \
+                                --form "description=Runtime GitOps Helm values"
                             )"
 
+                            if [[ "${FOLDER_CREATE_STATUS}" != "200" &&
+                                  "${FOLDER_CREATE_STATUS}" != "201" ]]; then
+
+                              echo "ERROR: Failed to create File Store folder."
+                              echo "HTTP status: ${FOLDER_CREATE_STATUS}"
+
+                              cat "${RESPONSE_FILE}" || true
+
+                              exit 1
+                            fi
+
+                            echo "File Store folder created."
+
+                          elif [ "${FOLDER_CHECK_STATUS}" = "200" ]; then
+
+                            echo "File Store folder already exists."
+
+                          else
+
+                            echo "ERROR: Unable to check File Store folder."
+                            echo "HTTP status: ${FOLDER_CHECK_STATUS}"
+
+                            cat "${RESPONSE_FILE}" || true
+
+                            exit 1
+                          fi
+
 
                           ################################################
-                          # 4B. File already exists - update
+                          # 5. Check for values file inside folder
                           ################################################
 
-                          elif [ "${CHECK_STATUS}" = "200" ]; then
+                          echo
+                          echo "Checking runtime values file..."
 
-                            echo
-                            echo "Runtime values file already exists."
-                            echo "Updating Harness File Store entry..."
+                          FILE_CHECK_STATUS="$(
+                            curl \
+                              --silent \
+                              --show-error \
+                              --location \
+                              --output "${RESPONSE_FILE}" \
+                              --write-out '%{http_code}' \
+                              --request GET \
+                              "${FILESTORE_BASE_URL}/${FILE_IDENTIFIER}?${FILESTORE_QUERY}" \
+                              --header "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>"
+                          )"
 
-                            FILESTORE_STATUS="$(
+
+                          ################################################
+                          # 6A. Create file when missing
+                          ################################################
+
+                          if [ "${FILE_CHECK_STATUS}" = "404" ]; then
+
+                            echo "Creating:"
+                            echo "/gitops-runtime/sys-gitops-agent-values.yaml"
+
+                            FILE_STATUS="$(
                               curl \
                                 --silent \
                                 --show-error \
                                 --location \
-                                --output "${FILESTORE_RESPONSE}" \
+                                --output "${RESPONSE_FILE}" \
                                 --write-out '%{http_code}' \
-                                --request PUT \
-                                "${FILESTORE_BASE_URL}/${FILESTORE_IDENTIFIER}?${FILESTORE_QUERY}" \
+                                --request POST \
+                                "${FILESTORE_BASE_URL}?${FILESTORE_QUERY}" \
                                 --header "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>" \
-                                --form "identifier=${FILESTORE_IDENTIFIER}" \
-                                --form "name=${FILESTORE_NAME}" \
+                                --form "identifier=${FILE_IDENTIFIER}" \
+                                --form "name=${FILE_NAME}" \
                                 --form "type=FILE" \
-                                --form "parentIdentifier=${FILESTORE_PARENT}" \
+                                --form "parentIdentifier=${FOLDER_IDENTIFIER}" \
                                 --form "fileUsage=MANIFEST_FILE" \
                                 --form "mimeType=application/x-yaml" \
                                 --form "description=Runtime Helm values generated by Harness GitOps" \
@@ -225,77 +250,71 @@ pipeline:
 
 
                           ################################################
-                          # 4C. Unexpected lookup error
+                          # 6B. Update existing file
                           ################################################
+
+                          elif [ "${FILE_CHECK_STATUS}" = "200" ]; then
+
+                            echo "Runtime values file already exists."
+                            echo "Updating:"
+                            echo "/gitops-runtime/sys-gitops-agent-values.yaml"
+
+                            FILE_STATUS="$(
+                              curl \
+                                --silent \
+                                --show-error \
+                                --location \
+                                --output "${RESPONSE_FILE}" \
+                                --write-out '%{http_code}' \
+                                --request PUT \
+                                "${FILESTORE_BASE_URL}/${FILE_IDENTIFIER}?${FILESTORE_QUERY}" \
+                                --header "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>" \
+                                --form "identifier=${FILE_IDENTIFIER}" \
+                                --form "name=${FILE_NAME}" \
+                                --form "type=FILE" \
+                                --form "parentIdentifier=${FOLDER_IDENTIFIER}" \
+                                --form "fileUsage=MANIFEST_FILE" \
+                                --form "mimeType=application/x-yaml" \
+                                --form "description=Runtime Helm values generated by Harness GitOps" \
+                                --form "content=@${VALUES_FILE};type=application/x-yaml"
+                            )"
 
                           else
 
-                            echo
-                            echo "ERROR: Unable to query Harness File Store."
-                            echo "HTTP status: ${CHECK_STATUS}"
+                            echo "ERROR: Unable to check runtime values file."
+                            echo "HTTP status: ${FILE_CHECK_STATUS}"
 
-                            if [ -s "${FILESTORE_CHECK_RESPONSE}" ]; then
-                              echo "Harness response:"
-
-                              if command -v jq >/dev/null 2>&1; then
-                                jq -r \
-                                  '.message // .status // .' \
-                                  "${FILESTORE_CHECK_RESPONSE}" \
-                                  2>/dev/null || true
-                              fi
-                            fi
+                            cat "${RESPONSE_FILE}" || true
 
                             exit 1
-
                           fi
 
 
                           ################################################
-                          # 5. Validate File Store operation
+                          # 7. Validate create/update
                           ################################################
 
-                          if [[ "${FILESTORE_STATUS}" != "200" &&
-                                "${FILESTORE_STATUS}" != "201" &&
-                                "${FILESTORE_STATUS}" != "204" ]]; then
+                          if [[ "${FILE_STATUS}" != "200" &&
+                                "${FILE_STATUS}" != "201" &&
+                                "${FILE_STATUS}" != "204" ]]; then
 
-                            echo
                             echo "ERROR: Harness File Store operation failed."
-                            echo "HTTP status: ${FILESTORE_STATUS}"
+                            echo "HTTP status: ${FILE_STATUS}"
 
-                            if [ -s "${FILESTORE_RESPONSE}" ]; then
-
-                              echo "Harness response:"
-
-                              if command -v jq >/dev/null 2>&1; then
-                                jq -r \
-                                  '.message // .status // .' \
-                                  "${FILESTORE_RESPONSE}" \
-                                  2>/dev/null || true
-                              else
-                                cat "${FILESTORE_RESPONSE}"
-                              fi
-
-                            fi
+                            cat "${RESPONSE_FILE}" || true
 
                             exit 1
-
                           fi
-
-
-                          ################################################
-                          # 6. Success
-                          ################################################
 
                           echo
                           echo "========================================"
-                          echo "Harness File Store updated successfully."
-                          echo "Identifier: ${FILESTORE_IDENTIFIER}"
+                          echo "Runtime values successfully stored"
+                          echo "/gitops-runtime/sys-gitops-agent-values.yaml"
                           echo "========================================"
 
 
               ############################################################
-              # STEP 2
-              # Harness-managed Native Helm deployment
+              # 8. Managed Helm deployment
               ############################################################
 
               - step:
@@ -307,10 +326,6 @@ pipeline:
                   spec:
                     skipSteadyStateCheck: false
 
-
-            ##############################################################
-            # ROLLBACK
-            ##############################################################
 
             rollbackSteps:
 
@@ -324,15 +339,9 @@ pipeline:
                     skipSteadyStateCheck: false
 
 
-        ##################################################################
-        # STAGE FAILURE STRATEGY
-        ##################################################################
-
         failureStrategies:
-
           - onFailure:
               errors:
                 - AllErrors
-
               action:
                 type: StageRollback
