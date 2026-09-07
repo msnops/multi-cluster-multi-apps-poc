@@ -1,3 +1,14 @@
+curl --silent --show-error --fail \
+  --request POST \
+  'https://app.harness.io/gitops/api/v1/agents/search?accountIdentifier=XzgUIuZXRMWymCzLKYZpCg&orgIdentifier=FIS_Post_Trade_Processing_Platfor&projectIdentifier=PTPInfrastructurePrd' \
+  -H 'x-api-key: ${HARNESS_API_KEY}' \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "identifiers": ["test"]
+  }' \
+  | jq .
+
+
 kasturim@CPC-Madhu-3Q41X:testing_tf$ curl --silent --show-error --fail   'https://app.harness.io/gitops/api/v1/agents?accountIdentifier=XzgUIuZXRMWymCzLKYZpCg&projectIdentifier=PTPInfrastructurePrd&orgIdentifier=FIS_Post_Trade_Processing_Platfor&identifier=test&connectedStatus=CONNECTED'   -H 'x-api-key: sat.XzgUIuZXRMWymCzLKYZpCg.6a9a7f0617dc3461a4748064.QFtjjGVoSmEPdZ82UCKv' | jq .
 {
   "pageSize": 10,
