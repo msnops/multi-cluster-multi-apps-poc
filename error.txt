@@ -77,3 +77,16 @@
 │ ERROR: Failed to trigger Harness pipeline.
 │ HTTP status: 400
 │ Invalid yaml: $.pipeline.stages[0].stage.failureStrategies: is missing but it is required
+
+
+
+
+
+
+
+
+
+
+
+====================================
+Invalid request: File/Folder not found in File Store with path: [/gitops-runtime/sys-gitops-agent-values.yaml], scope: [PROJECT], manifest identifier: [gitops_runtime_values]
