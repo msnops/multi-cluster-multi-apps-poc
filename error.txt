@@ -1,3 +1,10 @@
+commandType: is missing but it is required
+
+commandFlags: array found, string expected
+
+infrastructure: is missing but it is required
+
+
 │ Error: local-exec provisioner error
 │
 │   with terraform_data.deploy_gitops_agent["eks-ptp-nv-prd-1"],
