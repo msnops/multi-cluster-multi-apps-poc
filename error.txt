@@ -1,3 +1,12 @@
+C:\Users\e5738591>kubectl logs gitops-agent-c58f85d49-ffdz4 -n sys-gitops
+time="2026-09-07T16:10:30Z" level=info msg="redis compression will be set to 'gzip'"
+{"level":"error","msg":"redis client created","time":"2026-09-07T16:10:30Z"}
+{"level":"info","msg":"Starting configmap/secret informers","time":"2026-09-07T16:10:30Z"}
+{"level":"info","msg":"Configmap/secret informer synced","time":"2026-09-07T16:10:30Z"}
+time="2026-09-07T16:10:30Z" level=fatal msg="cannot connect to the gitops-server:agent scope is not set: meta identifiers are not set correctly, using:" accountId= agentId= disasterRecoveryId= orgId= pid=1 projectId= version="minor:84 patch:1 "
+
+==================================
+
 Retrieve helm manifest from release [gitops-agent] and namespace [sys-gitops]
 Executing command - KUBECONFIG=/opt/harness-delegate/repository/helm/.kube/c2efaff91f8f94a48a0fa3b484fc4566 helm get manifest gitops-agent --namespace=sys-gitops
 
