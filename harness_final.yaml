@@ -30,6 +30,12 @@ pipeline:
           execution:
             steps:
 
+              ############################################################
+              # STEP 1
+              # Download GitOps deploy.yaml and store it in Harness
+              # File Store as runtime Helm values
+              ############################################################
+
               - step:
                   type: ShellScript
                   name: Prepare GitOps Values
@@ -48,14 +54,23 @@ pipeline:
                           set -euo pipefail
                           set +x
 
+                          echo "========================================"
+                          echo "Preparing Harness GitOps runtime values"
+                          echo "========================================"
+
                           WORK_DIR="/tmp/gitops-bootstrap-<+pipeline.executionId>"
 
                           VALUES_FILE="${WORK_DIR}/gitops-runtime-values.yaml"
-                          FILESTORE_PAYLOAD="${WORK_DIR}/filestore-payload.yaml"
                           FILESTORE_RESPONSE="${WORK_DIR}/filestore-response.json"
+                          FILESTORE_CHECK_RESPONSE="${WORK_DIR}/filestore-check-response.json"
 
                           FILESTORE_IDENTIFIER="sys_gitops_agent_runtime_values"
                           FILESTORE_NAME="sys-gitops-agent-runtime-values.yaml"
+                          FILESTORE_PARENT="Root"
+
+                          FILESTORE_BASE_URL="https://app.harness.io/ng/api/file-store"
+
+                          FILESTORE_QUERY="accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>"
 
                           mkdir -p "${WORK_DIR}"
                           chmod 700 "${WORK_DIR}"
@@ -63,20 +78,21 @@ pipeline:
                           cleanup() {
                             rm -f \
                               "${VALUES_FILE}" \
-                              "${FILESTORE_PAYLOAD}" \
-                              "${FILESTORE_RESPONSE}"
+                              "${FILESTORE_RESPONSE}" \
+                              "${FILESTORE_CHECK_RESPONSE}"
                           }
 
                           trap cleanup EXIT
 
 
-                          ##################################################
-                          # 1. Download deploy.yaml from Harness GitOps
-                          ##################################################
+                          ################################################
+                          # 1. Download deploy.yaml
+                          ################################################
 
-                          echo "Downloading Harness GitOps values..."
+                          echo
+                          echo "Downloading GitOps deployment values..."
 
-                          HTTP_STATUS="$(
+                          DOWNLOAD_STATUS="$(
                             curl \
                               --silent \
                               --show-error \
@@ -87,23 +103,26 @@ pipeline:
                               "https://app.harness.io/gitops/api/v1/agents/<+pipeline.variables.gitops_agent_identifier>/deploy.yaml?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>&namespace=sys-gitops"
                           )"
 
-                          if [ "${HTTP_STATUS}" != "200" ]; then
+                          if [ "${DOWNLOAD_STATUS}" != "200" ]; then
                             echo "ERROR: GitOps values download failed."
-                            echo "HTTP status: ${HTTP_STATUS}"
+                            echo "HTTP status: ${DOWNLOAD_STATUS}"
                             exit 1
                           fi
 
                           if [ ! -s "${VALUES_FILE}" ]; then
-                            echo "ERROR: Downloaded GitOps values file is empty."
+                            echo "ERROR: downloaded GitOps values file is empty."
                             exit 1
                           fi
 
                           echo "GitOps values downloaded successfully."
 
 
-                          ##################################################
+                          ################################################
                           # 2. Add runtime overrides
-                          ##################################################
+                          ################################################
+
+                          echo
+                          echo "Adding runtime overrides..."
 
                           cat >> "${VALUES_FILE}" <<'EOF'
 
@@ -112,84 +131,171 @@ pipeline:
                               eks.amazonaws.com/nodegroup: eks-ptp-nv-prd-1-m7i_2cpu_8gb-1c-614edfa6ec0aecb4f85de80cc7
                           EOF
 
-                          echo "Runtime overrides added."
+                          echo "Runtime overrides added successfully."
+
+                          #
+                          # DO NOT print VALUES_FILE.
+                          #
+                          # deploy.yaml contains credentials/secrets.
+                          #
 
 
-                          ##################################################
-                          # 3. Build Harness File Store YAML definition
-                          ##################################################
+                          ################################################
+                          # 3. Check whether File Store object exists
+                          ################################################
 
-                          {
-                            cat <<EOF
-                          file:
-                            identifier: ${FILESTORE_IDENTIFIER}
-                            name: ${FILESTORE_NAME}
-                            description: Runtime Helm values generated by Harness GitOps
-                            type: FILE
-                            parentIdentifier: Root
-                            fileUsage: MANIFEST_FILE
-                            mimeType: application/x-yaml
-                            content: |
-                          EOF
+                          echo
+                          echo "Checking Harness File Store..."
 
-                            sed 's/^/      /' "${VALUES_FILE}"
-
-                          } > "${FILESTORE_PAYLOAD}"
-
-
-                          ##################################################
-                          # 4. Upload to Harness File Store
-                          ##################################################
-
-                          echo "Uploading runtime values to Harness File Store..."
-
-                          UPLOAD_STATUS="$(
+                          CHECK_STATUS="$(
                             curl \
                               --silent \
                               --show-error \
                               --location \
-                              --output "${FILESTORE_RESPONSE}" \
+                              --output "${FILESTORE_CHECK_RESPONSE}" \
                               --write-out '%{http_code}' \
-                              --request POST \
-                              "https://app.harness.io/ng/api/file-store/yaml?accountIdentifier=<+account.identifier>&orgIdentifier=<+org.identifier>&projectIdentifier=<+project.identifier>" \
-                              --header "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>" \
-                              --header "Content-Type: application/yaml" \
-                              --data-binary @"${FILESTORE_PAYLOAD}"
+                              --request GET \
+                              "${FILESTORE_BASE_URL}/${FILESTORE_IDENTIFIER}?${FILESTORE_QUERY}" \
+                              --header "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>"
                           )"
 
-                          if [[ "${UPLOAD_STATUS}" != "200" && "${UPLOAD_STATUS}" != "201" ]]; then
+                          echo "File Store lookup HTTP status: ${CHECK_STATUS}"
 
-                            echo "ERROR: Harness File Store upload failed."
-                            echo "HTTP status: ${UPLOAD_STATUS}"
 
-                            if command -v jq >/dev/null 2>&1; then
-                              jq -r \
-                                '.message // .status // .' \
-                                "${FILESTORE_RESPONSE}" \
-                                2>/dev/null || true
+                          ################################################
+                          # 4A. File does not exist - create
+                          ################################################
+
+                          if [ "${CHECK_STATUS}" = "404" ]; then
+
+                            echo
+                            echo "Runtime values file does not exist."
+                            echo "Creating Harness File Store entry..."
+
+                            FILESTORE_STATUS="$(
+                              curl \
+                                --silent \
+                                --show-error \
+                                --location \
+                                --output "${FILESTORE_RESPONSE}" \
+                                --write-out '%{http_code}' \
+                                --request POST \
+                                "${FILESTORE_BASE_URL}?${FILESTORE_QUERY}" \
+                                --header "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>" \
+                                --form "identifier=${FILESTORE_IDENTIFIER}" \
+                                --form "name=${FILESTORE_NAME}" \
+                                --form "type=FILE" \
+                                --form "parentIdentifier=${FILESTORE_PARENT}" \
+                                --form "fileUsage=MANIFEST_FILE" \
+                                --form "mimeType=application/x-yaml" \
+                                --form "description=Runtime Helm values generated by Harness GitOps" \
+                                --form "content=@${VALUES_FILE};type=application/x-yaml"
+                            )"
+
+
+                          ################################################
+                          # 4B. File already exists - update
+                          ################################################
+
+                          elif [ "${CHECK_STATUS}" = "200" ]; then
+
+                            echo
+                            echo "Runtime values file already exists."
+                            echo "Updating Harness File Store entry..."
+
+                            FILESTORE_STATUS="$(
+                              curl \
+                                --silent \
+                                --show-error \
+                                --location \
+                                --output "${FILESTORE_RESPONSE}" \
+                                --write-out '%{http_code}' \
+                                --request PUT \
+                                "${FILESTORE_BASE_URL}/${FILESTORE_IDENTIFIER}?${FILESTORE_QUERY}" \
+                                --header "x-api-key: <+secrets.getValue('org.sys-harness-svc-pat')>" \
+                                --form "identifier=${FILESTORE_IDENTIFIER}" \
+                                --form "name=${FILESTORE_NAME}" \
+                                --form "type=FILE" \
+                                --form "parentIdentifier=${FILESTORE_PARENT}" \
+                                --form "fileUsage=MANIFEST_FILE" \
+                                --form "mimeType=application/x-yaml" \
+                                --form "description=Runtime Helm values generated by Harness GitOps" \
+                                --form "content=@${VALUES_FILE};type=application/x-yaml"
+                            )"
+
+
+                          ################################################
+                          # 4C. Unexpected lookup error
+                          ################################################
+
+                          else
+
+                            echo
+                            echo "ERROR: Unable to query Harness File Store."
+                            echo "HTTP status: ${CHECK_STATUS}"
+
+                            if [ -s "${FILESTORE_CHECK_RESPONSE}" ]; then
+                              echo "Harness response:"
+
+                              if command -v jq >/dev/null 2>&1; then
+                                jq -r \
+                                  '.message // .status // .' \
+                                  "${FILESTORE_CHECK_RESPONSE}" \
+                                  2>/dev/null || true
+                              fi
                             fi
 
                             exit 1
 
                           fi
 
-                          echo "Runtime values uploaded successfully."
-                          echo "File Store identifier: ${FILESTORE_IDENTIFIER}"
 
-                          #
-                          # IMPORTANT:
-                          #
-                          # Do NOT:
-                          #
-                          #   cat "${VALUES_FILE}"
-                          #   cat "${FILESTORE_PAYLOAD}"
-                          #
-                          # because the GitOps YAML contains secrets.
-                          #
+                          ################################################
+                          # 5. Validate File Store operation
+                          ################################################
+
+                          if [[ "${FILESTORE_STATUS}" != "200" &&
+                                "${FILESTORE_STATUS}" != "201" &&
+                                "${FILESTORE_STATUS}" != "204" ]]; then
+
+                            echo
+                            echo "ERROR: Harness File Store operation failed."
+                            echo "HTTP status: ${FILESTORE_STATUS}"
+
+                            if [ -s "${FILESTORE_RESPONSE}" ]; then
+
+                              echo "Harness response:"
+
+                              if command -v jq >/dev/null 2>&1; then
+                                jq -r \
+                                  '.message // .status // .' \
+                                  "${FILESTORE_RESPONSE}" \
+                                  2>/dev/null || true
+                              else
+                                cat "${FILESTORE_RESPONSE}"
+                              fi
+
+                            fi
+
+                            exit 1
+
+                          fi
+
+
+                          ################################################
+                          # 6. Success
+                          ################################################
+
+                          echo
+                          echo "========================================"
+                          echo "Harness File Store updated successfully."
+                          echo "Identifier: ${FILESTORE_IDENTIFIER}"
+                          echo "========================================"
 
 
               ############################################################
-              # 5. Native Helm deployment
+              # STEP 2
+              # Harness-managed Native Helm deployment
               ############################################################
 
               - step:
@@ -203,7 +309,7 @@ pipeline:
 
 
             ##############################################################
-            # Rollback
+            # ROLLBACK
             ##############################################################
 
             rollbackSteps:
@@ -219,7 +325,7 @@ pipeline:
 
 
         ##################################################################
-        # Stage failure strategy
+        # STAGE FAILURE STRATEGY
         ##################################################################
 
         failureStrategies:
