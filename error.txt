@@ -90,3 +90,11 @@
 
 ====================================
 Invalid request: File/Folder not found in File Store with path: [/gitops-runtime/sys-gitops-agent-values.yaml], scope: [PROJECT], manifest identifier: [gitops_runtime_values]
+
+
+
+
+
+
+==============================================
+HelmClientRuntimeException: Failed to install helm chart. Executed command: KUBECONFIG=/opt/harness-delegate/repository/helm/.kube/c2efaff91f8f94a48a0fa3b484fc4566 helm install gitops-agent /opt/harness-delegate/repository/helm/source/e4068f26-5f73-3f14-a105-d52842ca1810/manifest-files -f /opt/harness-delegate/repository/helm/overrides/a1fafe02294cb02c5ceeeb9395764b32.yaml --namespace sys-gitops. Error: INSTALLATION FAILED: create: failed to create: namespaces "sys-gitops" not found
