@@ -1,0 +1,79 @@
+│ Error: local-exec provisioner error
+│
+│   with terraform_data.deploy_gitops_agent["eks-ptp-nv-prd-1"],
+│   on gitops_agent_new.tf line 230, in resource "terraform_data" "deploy_gitops_agent":
+│  230:   provisioner "local-exec" {
+│
+│ Error running command 'set -euo pipefail
+│ set +x
+│
+│ WORK_DIR="$(mktemp -d)"
+│ PAYLOAD_FILE="$WORK_DIR/payload.yaml"
+│ RESPONSE_FILE="$WORK_DIR/response.json"
+│
+│ cleanup() {
+│   rm -rf "$WORK_DIR"
+│ }
+│
+│ trap cleanup EXIT
+│
+│ cat > "$PAYLOAD_FILE" <<YAML
+│ pipeline:
+│   identifier: sys_gitops_bootstrap
+│   variables:
+│     - name: gitops_agent_identifier
+│       type: String
+│       value: eks_ptp_nv_prd_1_gitops_agent
+│ YAML
+│
+│ echo "Triggering Harness pipeline..."
+│ echo "GitOps Agent: eks_ptp_nv_prd_1_gitops_agent"
+│
+│ HTTP_STATUS="$(
+│   curl \
+│     --silent \
+│     --show-error \
+│     --location \
+│     --output "$RESPONSE_FILE" \
+│     --write-out '%{http_code}' \
+│     --request POST \
+│     "https://app.harness.io/pipeline/api/pipeline/execute/sys_gitops_bootstrap?accountIdentifier=XzgUIuZXRMWymCzLKYZpCg&orgIdentifier=FIS_Post_Trade_Processing_Platfor&projectIdentifier=PTPInfrastructurePrd&branch=eks_bootstrap" \
+│     --header "x-api-key: $HARNESS_API_KEY" \
+│     --header "Content-Type: application/yaml" \
+│     --data-binary @"$PAYLOAD_FILE"
+│ )"
+│
+│ if [[ "$HTTP_STATUS" != "200" && "$HTTP_STATUS" != "201" ]]; then
+│   echo "ERROR: Failed to trigger Harness pipeline."
+│   echo "HTTP status: $HTTP_STATUS"
+│
+│   if command -v jq >/dev/null 2>&1; then
+│     jq -r '.message // .status // .' "$RESPONSE_FILE" 2>/dev/null || true
+│   else
+│     cat "$RESPONSE_FILE"
+│   fi
+│
+│   exit 1
+│ fi
+│
+│ echo "Harness pipeline triggered successfully."
+│
+│ if command -v jq >/dev/null 2>&1; then
+│   EXECUTION_ID="$(
+│     jq -r '
+│       .data.planExecutionId //
+│       .data.executionId //
+│       .executionId //
+│       empty
+│     ' "$RESPONSE_FILE"
+│   )"
+│
+│   if [ -n "$EXECUTION_ID" ]; then
+│     echo "Execution ID: $EXECUTION_ID"
+│   fi
+│ fi
+│ ': exit status 1. Output: Triggering Harness pipeline...
+│ GitOps Agent: eks_ptp_nv_prd_1_gitops_agent
+│ ERROR: Failed to trigger Harness pipeline.
+│ HTTP status: 400
+│ Invalid yaml: $.pipeline.stages[0].stage.failureStrategies: is missing but it is required
