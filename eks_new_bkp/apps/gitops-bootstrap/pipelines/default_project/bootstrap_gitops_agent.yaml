@@ -1,0 +1,252 @@
+pipeline:
+  name: Bootstrap GitOps Agent
+  identifier: bootstrap_gitops_agent
+  orgIdentifier: default
+  projectIdentifier: default_project
+  tags: {}
+
+  variables:
+    - name: clusterName
+      type: String
+      value: <+input>
+
+    - name: environment
+      type: String
+      value: <+input>
+
+    - name: gitopsAgentId
+      type: String
+      value: <+input>
+
+    - name: delegateSelector
+      type: String
+      value: <+input>
+
+    - name: namespace
+      type: String
+      value: <+input>
+
+  stages:
+
+    #
+    # STAGE 1
+    #
+    - stage:
+        name: Prepare GitOps Agent
+        identifier: Prepare_GitOps_Agent
+        type: Custom
+
+        spec:
+          execution:
+            steps:
+
+              - step:
+                  type: ShellScript
+                  name: Fetch Agent Values and Store Secrets
+                  identifier: Fetch_And_Store_Agent_Secrets
+                  timeout: 10m
+
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+
+                    delegateSelectors:
+                      - <+pipeline.variables.delegateSelector>
+
+                    environmentVariables:
+
+                      - name: BOOTSTRAP_API_KEY
+                        type: String
+                        value: <+secrets.getValue("gitops_bootstrap_api_key")>
+
+                    source:
+                      type: Inline
+
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          CLUSTER_NAME="<+pipeline.variables.clusterName>"
+                          ENVIRONMENT="<+pipeline.variables.environment>"
+                          AGENT_ID="<+pipeline.variables.gitopsAgentId>"
+                          NAMESPACE="<+pipeline.variables.namespace>"
+
+                          ACCOUNT_ID="<+account.identifier>"
+                          ORG_ID="<+org.identifier>"
+                          PROJECT_ID="<+project.identifier>"
+
+                          REPO_URL="https://github.com/msnops/multi-cluster-multi-apps-poc.git"
+                          REPO_BRANCH="main"
+
+                          WORKDIR="$(mktemp -d)"
+
+                          cleanup() {
+                            rm -rf "${WORKDIR}"
+                          }
+
+                          trap cleanup EXIT
+
+                          echo "=========================================="
+                          echo "Preparing Harness GitOps Agent"
+                          echo "=========================================="
+                          echo "Cluster   : ${CLUSTER_NAME}"
+                          echo "Agent     : ${AGENT_ID}"
+                          echo "Org       : ${ORG_ID}"
+                          echo "Project   : ${PROJECT_ID}"
+                          echo "Namespace : ${NAMESPACE}"
+                          echo "=========================================="
+
+                          git clone \
+                            --depth 1 \
+                            --branch "${REPO_BRANCH}" \
+                            "${REPO_URL}" \
+                            "${WORKDIR}/repo"
+
+                          SCRIPT_DIR="${WORKDIR}/repo/eks_new/apps/gitops-bootstrap/scripts"
+
+                          chmod +x "${SCRIPT_DIR}"/*.sh
+
+                          SECRETS_DIR="${WORKDIR}/generated-secrets"
+
+                          #
+                          # Fetch Agent-specific values from Harness.
+                          #
+                          HARNESS_API_KEY="${BOOTSTRAP_API_KEY}" \
+                          HARNESS_ACCOUNT_ID="${ACCOUNT_ID}" \
+                          HARNESS_ORG_ID="${ORG_ID}" \
+                          HARNESS_PROJECT_ID="${PROJECT_ID}" \
+                          GITOPS_AGENT_ID="${AGENT_ID}" \
+                          NAMESPACE="${NAMESPACE}" \
+                          OUTPUT_DIR="${SECRETS_DIR}" \
+                            "${SCRIPT_DIR}/fetch-agent-overrides.sh"
+
+                          #
+                          # Per-Agent Harness secret IDs.
+                          #
+                          AGENT_SECRET_ID="gitops_${AGENT_ID}_agent_secret"
+
+                          REDIS_SECRET_ID="gitops_${AGENT_ID}_redis_password"
+
+                          #
+                          # Store Agent authentication secret.
+                          #
+                          HARNESS_API_KEY="${BOOTSTRAP_API_KEY}" \
+                          HARNESS_ACCOUNT_ID="${ACCOUNT_ID}" \
+                          HARNESS_ORG_ID="${ORG_ID}" \
+                          HARNESS_PROJECT_ID="${PROJECT_ID}" \
+                          SECRET_ID="${AGENT_SECRET_ID}" \
+                          SECRET_NAME="GitOps ${AGENT_ID} Agent Secret" \
+                          SECRET_VALUE_FILE="${SECRETS_DIR}/agent-secret" \
+                            "${SCRIPT_DIR}/upsert-harness-secret.sh"
+
+                          #
+                          # Store Redis password.
+                          #
+                          HARNESS_API_KEY="${BOOTSTRAP_API_KEY}" \
+                          HARNESS_ACCOUNT_ID="${ACCOUNT_ID}" \
+                          HARNESS_ORG_ID="${ORG_ID}" \
+                          HARNESS_PROJECT_ID="${PROJECT_ID}" \
+                          SECRET_ID="${REDIS_SECRET_ID}" \
+                          SECRET_NAME="GitOps ${AGENT_ID} Redis Password" \
+                          SECRET_VALUE_FILE="${SECRETS_DIR}/redis-password" \
+                            "${SCRIPT_DIR}/upsert-harness-secret.sh"
+
+                          echo
+                          echo "Agent-specific Harness secrets are ready."
+
+                    outputVariables: []
+
+    #
+    # STAGE 2
+    #
+    - stage:
+        name: Deploy GitOps Agent
+        identifier: Deploy_GitOps_Agent
+        type: Custom
+
+        spec:
+          execution:
+            steps:
+
+              - step:
+                  type: ShellScript
+                  name: Install GitOps Agent
+                  identifier: Install_GitOps_Agent
+                  timeout: 20m
+
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+
+                    delegateSelectors:
+                      - <+pipeline.variables.delegateSelector>
+
+                    environmentVariables:
+
+                      #
+                      # Dynamic secret identifier:
+                      #
+                      # devcluster01 ->
+                      # gitops_devcluster01_agent_secret
+                      #
+                      - name: AGENT_SECRET
+                        type: String
+                        value: <+secrets.getValue("gitops_" + <+pipeline.variables.gitopsAgentId> + "_agent_secret")>
+
+                      - name: REDIS_PASSWORD
+                        type: String
+                        value: <+secrets.getValue("gitops_" + <+pipeline.variables.gitopsAgentId> + "_redis_password")>
+
+                    source:
+                      type: Inline
+
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          CLUSTER_NAME="<+pipeline.variables.clusterName>"
+                          ENVIRONMENT="<+pipeline.variables.environment>"
+                          AGENT_ID="<+pipeline.variables.gitopsAgentId>"
+                          NAMESPACE="<+pipeline.variables.namespace>"
+
+                          ACCOUNT_ID="<+account.identifier>"
+                          ORG_ID="<+org.identifier>"
+                          PROJECT_ID="<+project.identifier>"
+
+                          REPO_URL="https://github.com/msnops/multi-cluster-multi-apps-poc.git"
+                          REPO_BRANCH="main"
+
+                          WORKDIR="$(mktemp -d)"
+
+                          cleanup() {
+                            rm -rf "${WORKDIR}"
+                          }
+
+                          trap cleanup EXIT
+
+                          git clone \
+                            --depth 1 \
+                            --branch "${REPO_BRANCH}" \
+                            "${REPO_URL}" \
+                            "${WORKDIR}/repo"
+
+                          DEPLOY_SCRIPT="${WORKDIR}/repo/eks_new/apps/gitops-bootstrap/scripts/deploy-agent.sh"
+
+                          chmod +x "${DEPLOY_SCRIPT}"
+
+                          REPO_ROOT="${WORKDIR}/repo" \
+                          CLUSTER_NAME="${CLUSTER_NAME}" \
+                          ENVIRONMENT="${ENVIRONMENT}" \
+                          GITOPS_AGENT_ID="${AGENT_ID}" \
+                          NAMESPACE="${NAMESPACE}" \
+                          HARNESS_ACCOUNT_ID="${ACCOUNT_ID}" \
+                          HARNESS_ORG_ID="${ORG_ID}" \
+                          HARNESS_PROJECT_ID="${PROJECT_ID}" \
+                          AGENT_SECRET="${AGENT_SECRET}" \
+                          REDIS_PASSWORD="${REDIS_PASSWORD}" \
+                          RELEASE_NAME="argocd" \
+                          CHART_NAME="gitops-agent/gitops-helm" \
+                          CHART_VERSION="1.2.8" \
+                            "${DEPLOY_SCRIPT}"
+
+                    outputVariables: []

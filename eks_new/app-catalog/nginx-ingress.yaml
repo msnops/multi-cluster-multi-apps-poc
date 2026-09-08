@@ -2,7 +2,7 @@ app:
   name: nginx-ingress
   namespace: nginx-ingress
   releaseName: nginx-ingress
-  chartPath: eks-new/apps/nginx-ingress
+  chartPath: eks_new/apps/nginx-ingress
   valuesFile: nginx-ingress.yaml
 
   ignoreDifferences:

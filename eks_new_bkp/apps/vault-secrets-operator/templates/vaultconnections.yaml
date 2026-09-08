@@ -1,0 +1,21 @@
+{{- $root := . -}}
+{{- range $eksNamespace, $cfg := $root.Values.secretConsumers }}
+{{- if ($cfg.enabled | default false) }}
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultConnection
+metadata:
+  name: {{ $root.Values.vault.connectionRef | default "default" | quote }}
+  namespace: {{ $eksNamespace | quote }}
+  labels:
+    app.kubernetes.io/name: vault-secrets-operator
+    app.kubernetes.io/component: vault-connection
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: platform
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+spec:
+  address: {{ required "vault.address is required" $root.Values.vault.address | quote }}
+  skipTLSVerify: {{ $root.Values.vault.skipTLSVerify | default false }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,21 @@
+
+controller:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+
+  nginxplus: false
+
+  service:
+    type: NodePort
+    externalTrafficPolicy: Cluster
+
+  serviceAccount:
+    imagePullSecretName: artifactory-regcred
+  config:
+    entries:
+      # the below entry is just a placeholder to move gitops status from progressing to healthy
+      external-status-address: placeholder.sp.fisglobal.com

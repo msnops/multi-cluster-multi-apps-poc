@@ -1,0 +1,11 @@
+storageClasses:
+
+  gp3:
+    enabled: true
+    isDefault: true
+
+  gp3Ext4:
+    enabled: true
+
+  gp3Xfs:
+    enabled: true

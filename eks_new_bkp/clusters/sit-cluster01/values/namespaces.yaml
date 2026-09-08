@@ -1,0 +1,8 @@
+# Using empty maps, in helm list gets overwritten by the last values.yaml file, where as maps gets merged 
+# If we want to use lists only then we have to use 2 different variables like global_namespace, env_namespaces and cluster_namespaces.
+# TO DO check with the team for the best approach.
+namespaces:
+  vault-secrets-operator: {}
+  nginx-ingress: {}
+  hello-world: {} 
+  dwlprd1: {}

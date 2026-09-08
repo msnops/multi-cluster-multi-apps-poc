@@ -1,0 +1,305 @@
+global:
+  image:
+    repository: docker.io/harness/argocd
+    tag: v3.4.2
+
+harness:
+  identity:
+    accountIdentifier: ""
+    orgIdentifier: ""
+    projectIdentifier: ""
+    agentIdentifier: ""
+
+  secrets:
+    agentSecret: ""
+    redisPassword: ""
+
+    caData:
+      enabled: false
+      secret: ""
+
+  gitopsServerHost: https://app.harness.io/prod1/gitops
+
+  networkPolicy:
+    create: true
+
+  createClusterRoles: true
+
+  configMap:
+    logLevel: DEBUG
+
+    http:
+      agentHttpTarget: https://app.harness.io/gitops
+      tlsEnabled: false
+      certPath: /tmp/ca.bundle
+
+    reconcile:
+      appsetReconcile: true
+
+  disasterRecovery:
+    enabled: false
+    identifier: ""
+
+  openshift:
+    enabled: false
+
+  flux:
+    enabled: false
+
+  argocdHarnessPlugin:
+    enabled: false
+
+
+argo-cd:
+  enabled: true
+
+  crds:
+    install: true
+    keep: true
+
+  configs:
+    cm:
+      cluster.inClusterEnabled: true
+
+  controller:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 256Mi
+      limits:
+        cpu: "500m"
+        memory: 512Mi
+
+  applicationSet:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 256Mi
+      limits:
+        cpu: "500m"
+        memory: 512Mi
+
+  repoServer:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 256Mi
+      limits:
+        cpu: "500m"
+        memory: 512Mi
+
+    env:
+      - name: HELM_PLUGINS
+        value: /helm-sops-tools/helm-plugins/
+
+      - name: HELM_SECRETS_CURL_PATH
+        value: /helm-sops-tools/curl
+
+      - name: HELM_SECRETS_SOPS_PATH
+        value: /helm-sops-tools/sops
+
+      - name: HELM_SECRETS_KUBECTL_PATH
+        value: /helm-sops-tools/kubectl
+
+      - name: HELM_SECRETS_BACKEND
+        value: sops
+
+      - name: HELM_SECRETS_VALUES_ALLOW_SYMLINKS
+        value: "false"
+
+      - name: HELM_SECRETS_VALUES_ALLOW_ABSOLUTE_PATH
+        value: "true"
+
+      - name: HELM_SECRETS_VALUES_ALLOW_PATH_TRAVERSAL
+        value: "false"
+
+      - name: HELM_SECRETS_WRAPPER_ENABLED
+        value: "true"
+
+      - name: HELM_SECRETS_HELM_PATH
+        value: /usr/local/bin/helm
+
+      - name: PATH
+        value: /helm-sops-tools/helm-secrets:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+    initContainers:
+      - name: sops-helm-secrets-tool
+
+        image: docker.io/harness/gitops-agent-installer-helper:v0.0.18
+        imagePullPolicy: IfNotPresent
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        command:
+          - sh
+          - -ec
+
+        args:
+          - |
+            cp -r /custom-tools/. /helm-sops-tools
+            cp /helm-sops-tools/helm-plugins/helm-secrets/scripts/wrapper/helm.sh /helm-sops-tools/helm
+            mkdir -p /helm-sops-tools/helm-secrets
+            cp /helm-sops-tools/helm-plugins/helm-secrets/scripts/wrapper/helm.sh /helm-sops-tools/helm-secrets/helm
+            chmod +x /helm-sops-tools/helm-secrets/*
+            chmod +x /helm-sops-tools/*
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsNonRoot: true
+          runAsUser: 65534
+          seccompProfile:
+            type: RuntimeDefault
+
+        volumeMounts:
+          - mountPath: /helm-sops-tools
+            name: helm-sops-tools
+
+    extraContainers:
+      - name: argocd-harness-plugin
+
+        command:
+          - /var/run/argocd/argocd-cmp-server
+
+        image: docker.io/harness/gitops-agent-installer-helper:v0.0.18
+        imagePullPolicy: IfNotPresent
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsNonRoot: true
+          runAsGroup: 999
+          runAsUser: 999
+          seccompProfile:
+            type: RuntimeDefault
+
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+
+        volumeMounts:
+          - mountPath: /var/run/argocd
+            name: var-files
+
+          - mountPath: /home/argocd/cmp-server/plugins
+            name: plugins
+
+          - mountPath: /tmp
+            name: tmp
+
+          - mountPath: /home/argocd/cmp-server/config/plugin.yaml
+            name: argocd-harness-plugin
+            subPath: harness.yaml
+
+  redis:
+    enabled: true
+
+    image:
+      repository: docker.io/harness/redis
+      tag: 7.4.8
+
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 256Mi
+      limits:
+        cpu: "500m"
+        memory: 512Mi
+
+  redisSecretInit:
+    enabled: true
+
+  redis-ha:
+    enabled: false
+
+    image:
+      repository: docker.io/harness/redis
+      tag: 7.4.8
+
+    haproxy:
+      enabled: false
+
+      image:
+        repository: docker.io/harness/haproxy
+        tag: 3.4.1-alpine3.24
+
+    configmapTest:
+      image:
+        repository: docker.io/harness/shellcheck
+        tag: v0.11.0
+
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 256Mi
+      limits:
+        cpu: "500m"
+        memory: 512Mi
+
+
+agent:
+  harnessName: ""
+
+  image:
+    repository: docker.io/harness/gitops-agent
+    tag: v0.124.0
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: 512Mi
+
+    limits:
+      cpu: "500m"
+      memory: 512Mi
+
+  fipsEnabled: false
+
+  autoscaling:
+    enabled: false
+
+  highAvailability: false
+
+  proxy:
+    enabled: false
+    httpProxy: ""
+    httpsProxy: ""
+
+
+upgrader:
+  enabled: true
+
+  image: docker.io/harness/upgrader:latest
+
+  config:
+    proxyHost: ""
+    proxyPort: ""
+    proxyScheme: ""
+    noProxy: ""
+    proxyUser: ""
+    proxyPassword: ""

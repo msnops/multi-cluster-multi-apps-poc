@@ -1,0 +1,10 @@
+vpcId: vpc-0b933697ce9d315c3
+
+nlbSecurityGroup: sg-022651c32d05fbbee
+
+targetGroups:
+  http:
+    name: nlb-eks-ptp-nv-prd-1-tcp-80
+
+  https:
+    name: nlb-eks-ptp-nv-prd-1-tcp-443

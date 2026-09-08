@@ -1,0 +1,10 @@
+cluster:
+  name: eks-sys-nv-dev-1
+  environment: dev
+  server: https://kubernetes.default.svc
+  project: 1102062e
+  gitopsAgentId: harnessgitops
+clusterApps:
+  additional:
+    - hello-world
+  disabled: []

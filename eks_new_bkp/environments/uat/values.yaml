@@ -1,0 +1,10 @@
+# Layer 2: common defaults for every application in UAT.
+global:
+  environment: uat
+
+replicaCount: 2
+
+image:
+  pullPolicy: IfNotPresent
+
+message: "Hello from UAT environment defaults"

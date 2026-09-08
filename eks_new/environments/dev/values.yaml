@@ -8,6 +8,3 @@ image:
   pullPolicy: Always
 
 message: "Hello from DEV environment defaults"
-
-environmentApps:
-  - namespaces

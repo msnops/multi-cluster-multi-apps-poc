@@ -1,0 +1,27 @@
+{{- $root := . -}}
+{{- range $eksNamespace, $cfg := $root.Values.secretConsumers }}
+{{- $own := $cfg.own | default dict }}
+{{- if and ($cfg.enabled | default false) ($own.enabled | default false) }}
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultAuth
+metadata:
+  name: vault-auth-own
+  namespace: {{ $eksNamespace | quote }}
+  labels:
+    app.kubernetes.io/name: vault-secrets-operator
+    app.kubernetes.io/component: vault-auth-own
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: platform
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+spec:
+  method: jwt
+  mount: {{ $own.authMount | default $root.Values.defaults.authMount | default "jwt" | quote }}
+  vaultConnectionRef: {{ $root.Values.vault.connectionRef | default "default" | quote }}
+  namespace: {{ printf "%s/%s" $root.Values.vault.namespacePrefix $cfg.own.vaultNamespace | quote }}
+  jwt:
+    role: {{ required (printf "secretConsumers.%s.own.role is required" $eksNamespace) $own.role | quote }}
+    serviceAccount: {{ $root.Values.serviceAccount.name | default "vault-auth" | quote }}
+{{- end }}
+{{- end }}

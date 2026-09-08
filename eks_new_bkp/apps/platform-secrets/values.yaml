@@ -1,0 +1,27 @@
+# Values for apps/platform-secrets
+# This app owns ONLY VaultStaticSecret resources.
+# It must NOT create:
+# - Namespaces
+# - Vault Secrets Operator deployment
+# - VaultConnection
+# - ServiceAccount
+# - VaultAuth
+#
+# Those resources belong to your namespaces and vault-secrets-operator apps.
+
+cluster:
+  name: ""
+
+vault:
+  connectionRef: default
+
+serviceAccount:
+  name: vault-auth
+
+defaults:
+  authMount: jwt
+  secretType: kv-v2
+  refreshAfter: 30s
+  sharedVaultNamespace: multi_client
+
+secretConsumers: {}

@@ -1,0 +1,29 @@
+cluster-autoscaler:
+
+  cloudProvider: aws
+
+  awsRegion: us-east-1
+
+  autoDiscovery:
+    clusterName: eks-ptp-nv-prd-1
+    tags:
+      - k8s.io/cluster-autoscaler/enabled=true
+      - k8s.io/cluster-autoscaler/eks-ptp-nv-prd-1=owned
+
+  fullnameOverride: cluster-autoscaler
+
+  rbac:
+    serviceAccount:
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::578254122498:role/eks-ptp-nv-prd-1-AutoscalerRole
+
+  extraArgs:
+    scan-interval: 60s
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+    limits:
+      memory: 256Mi
