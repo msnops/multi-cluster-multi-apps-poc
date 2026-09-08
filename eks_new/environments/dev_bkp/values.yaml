@@ -1,0 +1,10 @@
+# Layer 2: common defaults for every application in DEV.
+global:
+  environment: dev
+
+replicaCount: 1
+
+image:
+  pullPolicy: Always
+
+message: "Hello from DEV environment defaults"

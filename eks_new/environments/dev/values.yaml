@@ -1,10 +1,34 @@
-# Layer 2: common defaults for every application in DEV.
+namespaces:
+  monitoring: {}
+
 global:
   environment: dev
 
-replicaCount: 1
+vault:
+  address: https://hcv.fiscloudservices.com
 
-image:
-  pullPolicy: Always
+argocd:
+  syncWaves:
+    namespaces: "-30"
+    vaultSecretsOperator: "-20"
+    platformSecrets: "-10"
+    applications: "0"
 
-message: "Hello from DEV environment defaults"
+serviceAccount:
+  name: vault-auth
+
+artifactory:
+  dockerRegistry: ptp-docker-snapshot-local.docker.fis.dev
+  dockerUsername: svcacct-ptp-caas-snapshot
+  dockerPasswordKey: token
+
+nginxIngress:
+  requiredSecrets:
+    - artifactory-regcred
+    - nginx-default-tls
+
+environmentApps:
+  - namespaces
+  - storageclass
+  - nginx-ingress
+  - cluster-autoscaler
