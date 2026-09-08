@@ -30,7 +30,7 @@ spec:
               requeueAfterSeconds: {{ .Values.applicationSet.requeueAfterSeconds | default 60 }}
 
               files:
-                - path: eks_new/clusters/{{ required "clusterName is required" .Values.clusterName }}/cluster_values.yaml
+                - path: eks_new/clusters/devcluster01/cluster_values.yaml
 
           #
           # APPLICATIONS
