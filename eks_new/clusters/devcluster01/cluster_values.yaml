@@ -3,7 +3,7 @@ cluster:
   environment: dev
   server: https://kubernetes.default.svc
   project: 1102062e
-  gitopsAgentId: harnessgitops
+  gitopsAgentId: devcluster01
 clusterApps:
   additional:
     - hello-world
