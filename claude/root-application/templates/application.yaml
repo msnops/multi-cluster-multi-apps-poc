@@ -1,0 +1,36 @@
+{{- range $appName, $appConf := .Values.apps }}
+{{- if $appConf.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: "{{ $.Values.clusterName }}-{{ $appName }}"
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "{{ $appConf.syncWave }}"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    cluster: "{{ $.Values.clusterName }}"
+    environment: "{{ $.Values.environment }}"
+    managed-app: "{{ $appName }}"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/msnops/multi-cluster-multi-apps-poc.git
+    targetRevision: main
+    path: "claude/apps/{{ $appName }}"
+    helm:
+      valueFiles:
+        - "values-{{ $.Values.environment }}.yaml"
+  destination:
+    name: "{{ $.Values.clusterName }}"
+    namespace: "{{ $appName }}"
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+{{- end }}
+{{- end }}

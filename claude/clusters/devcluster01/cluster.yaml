@@ -1,0 +1,25 @@
+clusterName: devcluster01
+server: https://kubernetes.default.svc
+environment: dev
+apps:
+  namespaces:
+    enabled: true
+    syncWave: "-10"
+  vault-secrets-operator:
+    enabled: true
+    syncWave: "-8"
+  platform-secrets:
+    enabled: true
+    syncWave: "-6"
+  aws-load-balancer-controller:
+    enabled: true
+    syncWave: "-4"
+  nginx-ingress:
+    enabled: true
+    syncWave: "-2"
+  nginx-targetgroupbindings:
+    enabled: false
+    syncWave: "0"
+  hello-world:
+    enabled: false
+    syncWave: "10"
