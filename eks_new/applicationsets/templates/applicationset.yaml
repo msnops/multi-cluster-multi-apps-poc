@@ -1,84 +1,69 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
-
 metadata:
   name: gitops-agent-{{ required "gitopsAgentId is required" .Values.gitopsAgentId | lower | replace "_" "-" }}
   namespace: {{ required "gitopsNamespace is required" .Values.gitopsNamespace }}
-
 spec:
   goTemplate: true
-
   goTemplateOptions:
     - missingkey=error
 
   syncPolicy:
-    preserveResourcesOnDeletion: {{ .Values.applicationSet.preserveResourcesOnDeletion | default false }}
+    preserveResourcesOnDeletion: {{ .Values.preserveResourcesOnDeletion | default false }}
+
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["waven5"]
+        # ... rest of waves ...
 
   generators:
     - matrix:
         generators:
-
-          #
-          # CLUSTER
-          #
-          # The root Application passes clusterName into this Helm chart.
-          # The Git generator then reads that cluster's cluster_values.yaml.
-          #
+          # Cluster config generator
           - git:
               repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
               revision: {{ .Values.targetRevision | default "main" | quote }}
-              requeueAfterSeconds: {{ .Values.applicationSet.requeueAfterSeconds | default 60 }}
-
+              requeueAfterSeconds: {{ .Values.requeueAfterSeconds | default 60 }}
               files:
-                - path: eks_new/clusters/devcluster01/cluster_values.yaml
+                - path: eks_new/clusters/{{ required "clusterName is required" .Values.clusterName }}/cluster.yaml
 
-          #
-          # APPLICATIONS
-          #
-          # Effective app set =
-          #
-          # environmentApps
-          # + clusterApps.additional
-          # - clusterApps.disabled
-          #
+          # Apps generator - with filtering logic
           - git:
               repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
               revision: {{ .Values.targetRevision | default "main" | quote }}
-              requeueAfterSeconds: {{ .Values.applicationSet.requeueAfterSeconds | default 60 }}
-
+              requeueAfterSeconds: {{ .Values.requeueAfterSeconds | default 60 }}
               files:
-{{- $apps := dict }}
-
-{{- range (.Values.environmentApps | default list) }}
-{{- $_ := set $apps . true }}
-{{- end }}
-
-{{- range (.Values.clusterApps.additional | default list) }}
-{{- $_ := set $apps . true }}
-{{- end }}
-
-{{- range (.Values.clusterApps.disabled | default list) }}
-{{- $_ := unset $apps . }}
-{{- end }}
-
-{{- if eq (len $apps) 0 }}
-{{- fail "No applications enabled. Check environmentApps and clusterApps values." }}
-{{- end }}
-
-{{- range $app := keys $apps | sortAlpha }}
-                - path: eks_new/app-catalog/{{ $app }}.yaml
-{{- end }}
+                - path: 'eks_new/app-catalog/*.yaml'
+              template:
+                goTemplate: true
+                spec: |
+                  {{`
+                  {{- $appName := .app.name }}
+                  {{- $enabledApps := default (list) .cluster.enabledApps }}
+                  {{- $disabledApps := default (list) .cluster.disabledApps }}
+                  {{- $isEnabled := has $appName $enabledApps }}
+                  {{- $isDisabled := has $appName $disabledApps }}
+                  {{- if and $isEnabled (not $isDisabled) }}
+                  appName: {{ $appName }}
+                  {{- end }}
+                  `}}
 
   template:
     metadata:
       name: '{{`{{ printf "%s-%s" .app.name .cluster.name | normalize }}`}}'
-
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{`{{ default "0" .app.syncWave }}`}}'
       labels:
         app.kubernetes.io/name: '{{`{{ .app.name }}`}}'
         gitops.harness.io/cluster: '{{`{{ .cluster.name }}`}}'
         gitops.harness.io/environment: '{{`{{ .cluster.environment }}`}}'
         gitops.harness.io/gitops-agent-id: '{{`{{ .cluster.gitopsAgentId }}`}}'
-
+        syncWave: '{{`{{ printf "wave%s" (default "0" .app.syncWave | replace "-" "n") }}`}}'
       finalizers:
         - resources-finalizer.argocd.argoproj.io
 
@@ -86,39 +71,17 @@ spec:
       project: '{{`{{ .cluster.project }}`}}'
 
       sources:
-
-        #
-        # Application chart
-        #
         - repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
           targetRevision: {{ .Values.targetRevision | default "main" | quote }}
           path: '{{`{{ .app.chartPath }}`}}'
-
           helm:
             releaseName: '{{`{{ .app.releaseName }}`}}'
-
             ignoreMissingValueFiles: true
-
             valueFiles:
-
-              #
-              # Layer 1: application defaults
-              #
               - values.yaml
+              - '$values/eks_new/environments/{{`{{ .cluster.environment }}`}}/values/{{`{{ .app.name }}`}}.yaml'
+              - '$values/eks_new/clusters/{{`{{ .cluster.name }}`}}/values/{{`{{ .app.name }}`}}.yaml'
 
-              #
-              # Layer 2: environment defaults
-              #
-              - '$values/eks_new/environments/{{`{{ .cluster.environment }}`}}/values.yaml'
-
-              #
-              # Layer 3: cluster/application overrides
-              #
-              - '$values/eks_new/clusters/{{`{{ .cluster.name }}`}}/values/{{`{{ .app.valuesFile }}`}}'
-
-        #
-        # Values repository
-        #
         - repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
           targetRevision: {{ .Values.targetRevision | default "main" | quote }}
           ref: values
@@ -132,24 +95,13 @@ spec:
           prune: true
           selfHeal: true
           allowEmpty: false
-
         retry:
           limit: 5
-
           backoff:
             duration: 5s
             factor: 2
             maxDuration: 3m
-
         syncOptions:
           - CreateNamespace=true
           - PrunePropagationPolicy=foreground
           - PruneLast=true
-
-  templatePatch: |
-    spec:
-      ignoreDifferences:
-        - group: apiextensions.k8s.io
-          kind: CustomResourceDefinition
-          jsonPointers:
-            - /spec/preserveUnknownFields
