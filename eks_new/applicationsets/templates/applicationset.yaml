@@ -19,7 +19,37 @@ spec:
             - key: syncWave
               operator: In
               values: ["waven5"]
-        # ... rest of waves ...
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["waven4"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["waven3"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["waven2"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["waven1"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["wave0"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["wave1"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["wave2"]
+        - matchExpressions:
+            - key: syncWave
+              operator: Exists
 
   generators:
     - matrix:
@@ -32,7 +62,7 @@ spec:
               files:
                 - path: eks_new/clusters/{{ required "clusterName is required" .Values.clusterName }}/cluster.yaml
 
-          # Apps generator - with filtering logic
+          # Apps generator - with proper filtering at generation time
           - git:
               repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
               revision: {{ .Values.targetRevision | default "main" | quote }}
@@ -41,17 +71,21 @@ spec:
                 - path: 'eks_new/app-catalog/*.yaml'
               template:
                 goTemplate: true
-                spec: |
-                  {{`
-                  {{- $appName := .app.name }}
+                metadata:
+                  labels:
+                    appset.harness.io/filtered: "true"
+                spec:
+                  # Filtering logic to exclude disabled apps
+                  {{`{{- $appName := .app.name }}
                   {{- $enabledApps := default (list) .cluster.enabledApps }}
                   {{- $disabledApps := default (list) .cluster.disabledApps }}
                   {{- $isEnabled := has $appName $enabledApps }}
                   {{- $isDisabled := has $appName $disabledApps }}
                   {{- if and $isEnabled (not $isDisabled) }}
-                  appName: {{ $appName }}
-                  {{- end }}
-                  `}}
+                  parameters:
+                    - name: appName
+                      value: {{ $appName }}
+                  {{- end }}`}}
 
   template:
     metadata:
