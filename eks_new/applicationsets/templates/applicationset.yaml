@@ -11,46 +11,6 @@ spec:
   syncPolicy:
     preserveResourcesOnDeletion: {{ .Values.preserveResourcesOnDeletion | default false }}
 
-  strategy:
-    type: RollingSync
-    rollingSync:
-      steps:
-        - matchExpressions:
-            - key: syncWave
-              operator: In
-              values: ["waven5"]
-        - matchExpressions:
-            - key: syncWave
-              operator: In
-              values: ["waven4"]
-        - matchExpressions:
-            - key: syncWave
-              operator: In
-              values: ["waven3"]
-        - matchExpressions:
-            - key: syncWave
-              operator: In
-              values: ["waven2"]
-        - matchExpressions:
-            - key: syncWave
-              operator: In
-              values: ["waven1"]
-        - matchExpressions:
-            - key: syncWave
-              operator: In
-              values: ["wave0"]
-        - matchExpressions:
-            - key: syncWave
-              operator: In
-              values: ["wave1"]
-        - matchExpressions:
-            - key: syncWave
-              operator: In
-              values: ["wave2"]
-        - matchExpressions:
-            - key: syncWave
-              operator: Exists
-
   generators:
     - matrix:
         generators:
@@ -74,14 +34,13 @@ spec:
     metadata:
       name: '{{`{{ printf "%s-%s" .app.name .cluster.name | normalize }}`}}'
       annotations:
+        # Native ArgoCD sync-wave — handles wave ordering automatically
         argocd.argoproj.io/sync-wave: '{{`{{ default "0" .app.syncWave }}`}}'
       labels:
         app.kubernetes.io/name: '{{`{{ .app.name }}`}}'
         gitops.harness.io/cluster: '{{`{{ .cluster.name }}`}}'
         gitops.harness.io/environment: '{{`{{ .cluster.environment }}`}}'
         gitops.harness.io/gitops-agent-id: '{{`{{ .cluster.gitopsAgentId }}`}}'
-        syncWave: '{{`{{ printf "wave%s" (default "0" .app.syncWave | replace "-" "n") }}`}}'
-        # Add enabled/disabled label - only modify metadata, not spec
         appset.harness.io/enabled: '{{`{{ if and (has .app.name (default (list) .cluster.enabledApps)) (not (has .app.name (default (list) .cluster.disabledApps))) }}true{{- else }}false{{- end }}`}}'
       finalizers:
         - resources-finalizer.argocd.argoproj.io
