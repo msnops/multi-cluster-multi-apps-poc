@@ -85,5 +85,8 @@ spec:
 
   # Only sync applications that are enabled
   selector:
-    matchLabels:
-      appset.harness.io/enabled: "true"
+    matchExpressions:
+      - key: appset.harness.io/enabled
+        operator: In
+        values:
+          - "true"
