@@ -1,3 +1,4 @@
+cat applicationsets/templates/applicationset.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -11,10 +12,49 @@ spec:
   syncPolicy:
     preserveResourcesOnDeletion: {{ .Values.preserveResourcesOnDeletion | default false }}
 
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["waven5"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["waven4"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["waven3"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["waven2"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["waven1"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["wave0"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["wave1"]
+        - matchExpressions:
+            - key: syncWave
+              operator: In
+              values: ["wave2"]
+        - matchExpressions:
+            - key: syncWave
+              operator: Exists
+
   generators:
     - matrix:
         generators:
-          # Cluster config generator
           - git:
               repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
               revision: {{ .Values.targetRevision | default "main" | quote }}
@@ -22,7 +62,6 @@ spec:
               files:
                 - path: eks_new/clusters/{{ required "clusterName is required" .Values.clusterName }}/cluster.yaml
 
-          # Apps generator
           - git:
               repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
               revision: {{ .Values.targetRevision | default "main" | quote }}
@@ -34,14 +73,13 @@ spec:
     metadata:
       name: '{{`{{ printf "%s-%s" .app.name .cluster.name | normalize }}`}}'
       annotations:
-        # Native ArgoCD sync-wave — handles wave ordering automatically
         argocd.argoproj.io/sync-wave: '{{`{{ default "0" .app.syncWave }}`}}'
       labels:
         app.kubernetes.io/name: '{{`{{ .app.name }}`}}'
         gitops.harness.io/cluster: '{{`{{ .cluster.name }}`}}'
         gitops.harness.io/environment: '{{`{{ .cluster.environment }}`}}'
         gitops.harness.io/gitops-agent-id: '{{`{{ .cluster.gitopsAgentId }}`}}'
-        appset.harness.io/enabled: '{{`{{ if and (has .app.name (default (list) .cluster.enabledApps)) (not (has .app.name (default (list) .cluster.disabledApps))) }}true{{- else }}false{{- end }}`}}'
+        syncWave: '{{`{{ printf "wave%s" (default "0" .app.syncWave | replace "-" "n") }}`}}'
       finalizers:
         - resources-finalizer.argocd.argoproj.io
 
@@ -70,7 +108,7 @@ spec:
 
       syncPolicy:
         automated:
-          prune: false
+          prune: true
           selfHeal: true
           allowEmpty: false
         retry:
@@ -81,12 +119,29 @@ spec:
             maxDuration: 3m
         syncOptions:
           - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
           - PruneLast=true
 
-  # Only sync applications that are enabled
+  templatePatch: |
+    {{`{{- $appName := .app.name }}`}}
+    {{`{{- $enabledApps := default (list) .cluster.enabledApps }}`}}
+    {{`{{- $disabledApps := default (list) .cluster.disabledApps }}`}}
+    {{`{{- $isEnabled := has $appName $enabledApps }}`}}
+    {{`{{- $isDisabled := has $appName $disabledApps }}`}}
+    {{`{{- if and $isEnabled (not $isDisabled) }}`}}
+    metadata:
+      labels:
+        appset.harness.io/enabled: "true"
+    {{`{{- else }}`}}
+    metadata:
+      labels:
+        appset.harness.io/enabled: "false"
+    spec:
+      destination:
+        server: "https://kubernetes.default.svc"
+        namespace: "disabled"
+    {{`{{- end }}`}}
+
   selector:
-    matchExpressions:
-      - key: appset.harness.io/enabled
-        operator: In
-        values:
-          - "true"
+    matchLabels:
+      appset.harness.io/enabled: "true"
