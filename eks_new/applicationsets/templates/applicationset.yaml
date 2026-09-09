@@ -62,7 +62,7 @@ spec:
               files:
                 - path: eks_new/clusters/{{ required "clusterName is required" .Values.clusterName }}/cluster.yaml
 
-          # Apps generator - no filtering here
+          # Apps generator
           - git:
               repoURL: {{ required "repoURL is required" .Values.repoURL | quote }}
               revision: {{ .Values.targetRevision | default "main" | quote }}
@@ -81,6 +81,8 @@ spec:
         gitops.harness.io/environment: '{{`{{ .cluster.environment }}`}}'
         gitops.harness.io/gitops-agent-id: '{{`{{ .cluster.gitopsAgentId }}`}}'
         syncWave: '{{`{{ printf "wave%s" (default "0" .app.syncWave | replace "-" "n") }}`}}'
+        # Add enabled/disabled label - only modify metadata, not spec
+        appset.harness.io/enabled: '{{`{{ if and (has .app.name (default (list) .cluster.enabledApps)) (not (has .app.name (default (list) .cluster.disabledApps))) }}true{{- else }}false{{- end }}`}}'
       finalizers:
         - resources-finalizer.argocd.argoproj.io
 
@@ -109,7 +111,7 @@ spec:
 
       syncPolicy:
         automated:
-          prune: true
+          prune: false
           selfHeal: true
           allowEmpty: false
         retry:
@@ -120,29 +122,7 @@ spec:
             maxDuration: 3m
         syncOptions:
           - CreateNamespace=true
-          - PrunePropagationPolicy=foreground
           - PruneLast=true
-
-  # Filter apps based on enabledApps and disabledApps
-  templatePatch: |
-    {{`{{- $appName := .app.name }}
-    {{- $enabledApps := default (list) .cluster.enabledApps }}
-    {{- $disabledApps := default (list) .cluster.disabledApps }}
-    {{- $isEnabled := has $appName $enabledApps }}
-    {{- $isDisabled := has $appName $disabledApps }}
-    {{- if and $isEnabled (not $isDisabled) }}
-    metadata:
-      labels:
-        appset.harness.io/enabled: "true"
-    {{- else }}
-    metadata:
-      labels:
-        appset.harness.io/enabled: "false"
-    spec:
-      destination:
-        server: "https://kubernetes.default.svc"
-        namespace: "argocd-disabled"
-    {{- end }}`}}
 
   # Only sync applications that are enabled
   selector:
